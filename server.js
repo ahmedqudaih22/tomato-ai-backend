@@ -3,6 +3,7 @@ const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 const Stripe = require('stripe');
+const { GoogleGenAI } = require('@google/genai');
 require('dotenv').config();
 
 const app = express();
@@ -81,6 +82,15 @@ const initializeDb = async () => {
 // --- Stripe Setup ---
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+// --- Gemini AI Setup ---
+let ai;
+if (process.env.API_KEY) {
+    ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    console.log("GoogleGenAI initialized successfully.");
+} else {
+    console.warn("API_KEY environment variable not set. AI features will be disabled.");
+}
 
 // --- Auth Middleware ---
 const authenticateToken = async (req, res, next) => {
@@ -203,6 +213,7 @@ app.put('/api/users/me', authenticateToken, async (req, res) => {
     }
 });
 
+// Note: This endpoint is no longer used by the client but kept for potential future use.
 app.post('/api/users/deduct-points', authenticateToken, async (req, res) => {
     const { amount } = req.body;
     const userId = req.user.id;
@@ -222,6 +233,92 @@ app.post('/api/users/deduct-points', authenticateToken, async (req, res) => {
         res.status(500).json({ message: 'Error updating points' });
     }
 });
+
+// --- AI Generation Proxy ---
+app.post('/api/ai/generate', authenticateToken, async (req, res) => {
+    if (!ai) {
+        return res.status(503).json({ message: 'AI services are not available on the server.' });
+    }
+    const { cost, payload } = req.body;
+    const userId = req.user.id;
+
+    if (req.user.points < cost) {
+        return res.status(402).json({ message: 'Insufficient points' });
+    }
+    
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        await client.query('UPDATE users SET points = points - $1 WHERE id = $2', [cost, userId]);
+
+        const { type, ...params } = payload;
+        let apiResult;
+        
+        if (type === 'generateImages') {
+            const response = await ai.models.generateImages(params);
+            const base64 = response.generatedImages[0].image.imageBytes;
+            apiResult = { dataUrl: `data:image/png;base64,${base64}` };
+        } else if (type === 'generateContent') {
+            const response = await ai.models.generateContent(params);
+            const firstPart = response.candidates?.[0]?.content?.parts?.[0];
+            if (firstPart && firstPart.inlineData) {
+                const base64 = firstPart.inlineData.data;
+                const mimeType = firstPart.inlineData.mimeType;
+                if (params.config?.responseModalities?.includes('AUDIO')) {
+                    apiResult = { base64Audio: base64 };
+                } else { // Assume image
+                    apiResult = { dataUrl: `data:${mimeType};base64,${base64}` };
+                }
+            } else {
+                throw new Error("AI call did not return expected data.");
+            }
+        } else {
+            throw new Error('Invalid AI operation type');
+        }
+        
+        const userResult = await client.query('SELECT * FROM users WHERE id = $1', [userId]);
+        await client.query('COMMIT');
+        
+        const user = userResult.rows[0];
+        delete user.password;
+        
+        res.json({ result: apiResult, user });
+
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error("AI Generation Error:", err);
+        res.status(500).json({ message: err.message || 'An error occurred during AI generation.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/ai/remove-background', authenticateToken, isAdmin, async (req, res) => {
+    if (!ai) {
+        return res.status(503).json({ message: 'AI services are not available on the server.' });
+    }
+    try {
+        const { imagePart, textPart } = req.body;
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: { parts: [imagePart, textPart] },
+            config: { responseModalities: ['IMAGE'] },
+        });
+
+        const firstPart = response.candidates?.[0]?.content?.parts?.[0];
+        if (firstPart && firstPart.inlineData) {
+            const newBase64 = firstPart.inlineData.data;
+            const newMimeType = firstPart.inlineData.mimeType;
+            res.json({ dataUrl: `data:${newMimeType};base64,${newBase64}` });
+        } else {
+            throw new Error("AI background removal failed to return an image.");
+        }
+    } catch (err) {
+        console.error("BG Removal Error:", err);
+        res.status(500).json({ message: err.message || 'Failed to remove background.' });
+    }
+});
+
 
 // --- Settings Routes ---
 app.get('/api/settings', async (req, res) => {
