@@ -1,7 +1,4 @@
-// A simple backend for Tomato AI
-// NOTE: This is a basic implementation and lacks robust error handling, password hashing, etc.
-// It's designed to be a functional starting point for the Render deployment.
-
+// A full-stack backend for Tomato AI
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
@@ -17,7 +14,7 @@ app.use((req, res, next) => {
   if (req.originalUrl === '/stripe-webhook') {
     next();
   } else {
-    express.json()(req, res, next);
+    express.json({ limit: '10mb' })(req, res, next); // Increase limit for data URLs
   }
 });
 app.use(cors());
@@ -31,15 +28,15 @@ const pool = new Pool({
   }
 });
 
-// --- Secure Data ---
-// In a real app, this would come from the database and be managed in the admin panel.
-// For simplicity and security, we define it here. Price is in cents.
-const packages = [
-    { id: 1, points: 100, price: 500 },   // $5.00
-    { id: 2, points: 250, price: 1000 },  // $10.00
-    { id: 3, points: 300, price: 100 },   // $1.00 (for testing)
-    { id: 4, points: 1500, price: 4000 }, // $40.00
-];
+const defaultSettings = {
+    costs: { imageEdit: 2, imageCreate: 5, textToSpeech: 1 },
+    referralBonus: 50,
+    theme: { logoUrl: "https://i.ibb.co/mH2WvTz/tomato-logo.png", logoWidth: 150, logoHeight: 50, logoAlign: 'center', primaryColor: "#FF6B6B", secondaryColor: "#2EC4B6", navbarColor: "#FFFFFF", navTextColor: "#2A323C" },
+    content: { siteNameAr: "Tomato AI", siteNameEn: "Tomato AI", heroTitleAr: "أدوات ذكاء اصطناعي قوية لإبداعك", heroTitleEn: "Powerful AI Tools for Your Creativity", heroSubtitleAr: "حرر، أنشئ، وحول أفكارك إلى واقع بسهولة.", heroSubtitleEn: "Edit, create, and bring your ideas to life with ease." },
+    store: { packages: [{ id: 1, points: 100, price: 5 }, { id: 2, points: 250, price: 10 }, { id: 3, points: 300, price: 1 }, { id: 4, points: 1500, price: 40 }] },
+    announcement: { enabled: false, imageUrl: "", contentAr: "<h1>عرض خاص!</h1><p>احصل على ضعف النقاط عند الشراء هذا الأسبوع.</p>", contentEn: "<h1>Special Offer!</h1><p>Get double the points on all purchases this week.</p>" }
+};
+
 
 // --- Database Initialization ---
 const initializeDb = async () => {
@@ -58,8 +55,24 @@ const initializeDb = async () => {
             );
         `);
         console.log("Database initialized: 'users' table is ready.");
+        
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS settings (
+                id INT PRIMARY KEY DEFAULT 1,
+                config JSONB NOT NULL
+            );
+        `);
+         const settingsRes = await client.query('SELECT * FROM settings WHERE id = 1');
+        if (settingsRes.rows.length === 0) {
+            await client.query('INSERT INTO settings (id, config) VALUES (1, $1)', [JSON.stringify(defaultSettings)]);
+            console.log("Database initialized: Default settings inserted.");
+        } else {
+            console.log("Database initialized: 'settings' table is ready.");
+        }
+
     } catch (err) {
         console.error("Error initializing database:", err);
+        throw err; // Re-throw the error to be caught by the server starter
     } finally {
         client.release();
     }
@@ -76,6 +89,7 @@ const authenticateToken = async (req, res, next) => {
     if (token == null) return res.sendStatus(401);
 
     try {
+        // Simple token is user ID. In production, use JWT.
         const userId = parseInt(token);
         if (isNaN(userId)) return res.sendStatus(401);
 
@@ -89,6 +103,13 @@ const authenticateToken = async (req, res, next) => {
         console.error("Auth middleware error:", err);
         res.sendStatus(500);
     }
+};
+
+const isAdmin = (req, res, next) => {
+    if (!req.user || !req.user.is_admin) {
+        return res.status(403).json({ message: 'Forbidden: Admin access required.' });
+    }
+    next();
 };
 
 
@@ -108,7 +129,7 @@ app.post('/api/register', async (req, res) => {
 
         // In a real app, you MUST hash the password.
         const result = await pool.query(
-            'INSERT INTO users (email, password, country, is_admin) VALUES ($1, $2, $3, $4) RETURNING id, email, country, points, is_admin, status',
+            'INSERT INTO users (email, password, country, is_admin) VALUES (LOWER($1), $2, $3, $4) RETURNING id, email, country, points, is_admin, status',
             [email, password, country, isFirstUser]
         );
         
@@ -122,7 +143,7 @@ app.post('/api/register', async (req, res) => {
         if (err.code === '23505') { // unique_violation
             return res.status(409).json({ message: 'Email already exists.' });
         }
-        console.error(err);
+        console.error("Registration Error:", err);
         res.status(500).json({ message: 'Internal server error' });
     }
 });
@@ -131,12 +152,12 @@ app.post('/api/register', async (req, res) => {
 app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
     try {
-        const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+        const result = await pool.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
         if (result.rows.length === 0) {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
         const user = result.rows[0];
-        if (user.password !== password) {
+        if (user.password !== password) { // IMPORTANT: In production, use bcrypt.compare
             return res.status(401).json({ message: 'Invalid credentials' });
         }
         if (user.status === 'banned') {
@@ -148,19 +169,18 @@ app.post('/api/login', async (req, res) => {
         res.status(200).json({ message: 'Login successful', user, token });
 
     } catch (err) {
-        console.error(err);
+        console.error("Login error:", err);
         res.status(500).json({ message: 'Internal server error' });
     }
 });
 
-// Fetch user data based on a token
+// --- User Routes (Authenticated) ---
 app.get('/api/users/me', authenticateToken, async (req, res) => {
     const user = req.user;
     delete user.password;
     res.json({ user });
 });
 
-// Update user profile
 app.put('/api/users/me', authenticateToken, async (req, res) => {
     const { email, password } = req.body;
     const userId = req.user.id;
@@ -169,21 +189,20 @@ app.put('/api/users/me', authenticateToken, async (req, res) => {
         let query;
         let queryParams;
         if (password) {
-            query = 'UPDATE users SET email = $1, password = $2 WHERE id = $3 RETURNING id, email, country, points, is_admin, status';
+            query = 'UPDATE users SET email = LOWER($1), password = $2 WHERE id = $3 RETURNING id, email, country, points, is_admin, status';
             queryParams = [email, password, userId];
         } else {
-            query = 'UPDATE users SET email = $1 WHERE id = $2 RETURNING id, email, country, points, is_admin, status';
+            query = 'UPDATE users SET email = LOWER($1) WHERE id = $2 RETURNING id, email, country, points, is_admin, status';
             queryParams = [email, userId];
         }
         const result = await pool.query(query, queryParams);
         res.json({ user: result.rows[0] });
     } catch(err) {
-        console.error(err);
+        console.error("Profile update error:", err);
         res.status(500).json({ message: 'Error updating profile' });
     }
 });
 
-// Deduct points for an operation
 app.post('/api/users/deduct-points', authenticateToken, async (req, res) => {
     const { amount } = req.body;
     const userId = req.user.id;
@@ -199,22 +218,51 @@ app.post('/api/users/deduct-points', authenticateToken, async (req, res) => {
         );
         res.json({ user: result.rows[0] });
     } catch(err) {
-        console.error(err);
+        console.error("Deduct points error:", err);
         res.status(500).json({ message: 'Error updating points' });
     }
 });
 
-// Create Stripe Checkout Session
+// --- Settings Routes ---
+app.get('/api/settings', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT config FROM settings WHERE id = 1');
+        if (result.rows.length > 0) {
+            res.json(result.rows[0].config);
+        } else {
+            res.status(404).json({ message: 'Settings not found.' });
+        }
+    } catch (err) {
+        console.error("Get settings error:", err);
+        res.status(500).json({ message: 'Failed to fetch settings' });
+    }
+});
+
+app.put('/api/admin/settings', authenticateToken, isAdmin, async (req, res) => {
+    const newSettings = req.body;
+    try {
+        await pool.query('UPDATE settings SET config = $1 WHERE id = 1', [newSettings]);
+        res.status(200).json({ message: 'Settings updated successfully' });
+    } catch (err) {
+        console.error("Update settings error:", err);
+        res.status(500).json({ message: 'Failed to update settings' });
+    }
+});
+
+// --- Store & Payment Routes ---
 app.post('/api/create-checkout-session', authenticateToken, async (req, res) => {
     const { packageId } = req.body;
     const user = req.user;
 
-    const pkg = packages.find(p => p.id === packageId);
-    if (!pkg) {
-        return res.status(404).json({ message: 'Package not found.' });
-    }
-
     try {
+        const settingsRes = await pool.query('SELECT config FROM settings WHERE id = 1');
+        const settings = settingsRes.rows[0].config;
+        const pkg = settings.store.packages.find(p => p.id === packageId);
+
+        if (!pkg) {
+            return res.status(404).json({ message: 'Package not found.' });
+        }
+
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
             line_items: [{
@@ -224,13 +272,13 @@ app.post('/api/create-checkout-session', authenticateToken, async (req, res) => 
                         name: `${pkg.points} Points Package`,
                         description: `Get ${pkg.points} points for your Tomato AI account.`,
                     },
-                    unit_amount: pkg.price,
+                    unit_amount: pkg.price * 100, // Price in cents
                 },
                 quantity: 1,
             }],
             mode: 'payment',
-            success_url: `https://tomato-ai-154300777659.us-west1.run.app/?payment_success=true#store`,
-            cancel_url: `https://tomato-ai-154300777659.us-west1.run.app/?payment_cancelled=true#store`,
+            success_url: `${process.env.FRONTEND_URL || 'https://tomato-ai-15430077659.us-west1.run.app'}/?payment_success=true#store`,
+            cancel_url: `${process.env.FRONTEND_URL || 'https://tomato-ai-15430077659.us-west1.run.app'}/?payment_cancelled=true#store`,
             customer_email: user.email,
             metadata: {
                 userEmail: user.email,
@@ -268,7 +316,7 @@ app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req,
         console.log(`Payment successful for ${userEmail}. Attempting to add ${pointsToAdd} points.`);
         try {
             const result = await pool.query(
-                'UPDATE users SET points = points + $1 WHERE email = $2 RETURNING email, points',
+                'UPDATE users SET points = points + $1 WHERE LOWER(email) = LOWER($2) RETURNING email, points',
                 [pointsToAdd, userEmail]
             );
             if (result.rowCount > 0) {
@@ -289,8 +337,7 @@ app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req,
 
 
 // --- Admin Routes ---
-app.get('/api/admin/users', authenticateToken, async (req, res) => {
-    if (!req.user.is_admin) return res.sendStatus(403);
+app.get('/api/admin/users', authenticateToken, isAdmin, async (req, res) => {
     try {
         const result = await pool.query('SELECT id, email, country, points, is_admin, status FROM users ORDER BY id');
         res.json({ users: result.rows });
@@ -299,27 +346,43 @@ app.get('/api/admin/users', authenticateToken, async (req, res) => {
     }
 });
 
-app.put('/api/admin/users/:id', authenticateToken, async (req, res) => {
-     if (!req.user.is_admin) return res.sendStatus(403);
-     const { id } = req.params;
+app.put('/api/admin/users/:id', authenticateToken, isAdmin, async (req, res) => {
+     const targetUserId = parseInt(req.params.id);
      const { points, status } = req.body;
+     const adminUserId = req.user.id;
+     
+     if (isNaN(targetUserId)) return res.status(400).json({ message: 'Invalid user ID' });
+
      try {
+        const targetUserRes = await pool.query('SELECT * FROM users WHERE id = $1', [targetUserId]);
+        if (targetUserRes.rows.length === 0) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        const targetUser = targetUserRes.rows[0];
+
+        // Safety check: Prevent an admin from banning themselves
+        if (targetUser.is_admin && targetUser.id === adminUserId && status === 'banned') {
+             return res.status(403).json({ message: 'Admins cannot ban themselves.' });
+        }
+
         const result = await pool.query(
-            'UPDATE users SET points = points + $1, status = $2 WHERE id = $3 AND is_admin = FALSE RETURNING id, email, country, points, is_admin, status',
-            [points, status, id]
+            'UPDATE users SET points = points + $1, status = $2 WHERE id = $3 RETURNING id, email, country, points, is_admin, status',
+            [points, status, targetUserId]
         );
+
         if (result.rowCount > 0) {
             res.json({ user: result.rows[0] });
         } else {
-            res.status(404).json({ message: 'User not found or is an admin' });
+            // This case should ideally not be reached due to the check above
+            res.status(404).json({ message: 'User not found' });
         }
      } catch (err) {
+        console.error("Admin user update error:", err);
         res.status(500).json({ message: 'Failed to update user' });
      }
 });
 
-app.delete('/api/admin/users', authenticateToken, async(req, res) => {
-    if (!req.user.is_admin) return res.sendStatus(403);
+app.delete('/api/admin/users', authenticateToken, isAdmin, async(req, res) => {
     try {
         await pool.query("DELETE FROM users WHERE is_admin = FALSE");
         res.status(200).json({message: 'All non-admin users deleted.'});
@@ -330,7 +393,17 @@ app.delete('/api/admin/users', authenticateToken, async(req, res) => {
 
 
 // --- Start Server ---
-app.listen(port, () => {
-  console.log(`Server listening on port ${port}`);
-  initializeDb();
-});
+const startServer = async () => {
+    try {
+        // Wait for the database to be ready before starting the server
+        await initializeDb();
+        app.listen(port, () => {
+            console.log(`Server listening on port ${port}`);
+        });
+    } catch (error) {
+        console.error("Failed to initialize database and start server:", error);
+        process.exit(1); // Exit if the database can't be initialized
+    }
+};
+
+startServer();
