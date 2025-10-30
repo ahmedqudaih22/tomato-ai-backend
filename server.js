@@ -225,16 +225,35 @@ app.post('/api/users/deduct-points', authenticateToken, async (req, res) => {
 
 // --- Settings Routes ---
 app.get('/api/settings', async (req, res) => {
+    let client;
     try {
-        const result = await pool.query('SELECT config FROM settings WHERE id = 1');
+        client = await pool.connect();
+        let result = await client.query('SELECT config FROM settings WHERE id = 1');
+        
+        // SELF-HEALING: If settings don't exist, create and return them.
+        if (result.rows.length === 0) {
+            console.warn("Settings not found, creating from default...");
+            await client.query('INSERT INTO settings (id, config) VALUES (1, $1) ON CONFLICT (id) DO NOTHING', [JSON.stringify(defaultSettings)]);
+            // Re-fetch the settings after insertion
+            result = await client.query('SELECT config FROM settings WHERE id = 1');
+            console.log("Default settings successfully created and fetched.");
+        }
+        
         if (result.rows.length > 0) {
             res.json(result.rows[0].config);
         } else {
-            res.status(404).json({ message: 'Settings not found.' });
+             // This case should now be virtually impossible to reach.
+            console.error("CRITICAL: Failed to fetch settings even after attempting to create them.");
+            res.status(500).json({ message: 'Failed to retrieve or create settings.' });
         }
+
     } catch (err) {
         console.error("Get settings error:", err);
         res.status(500).json({ message: 'Failed to fetch settings' });
+    } finally {
+        if (client) {
+            client.release();
+        }
     }
 });
 
