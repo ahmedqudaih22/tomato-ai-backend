@@ -31,6 +31,16 @@ const pool = new Pool({
   }
 });
 
+// --- Secure Data ---
+// In a real app, this would come from the database and be managed in the admin panel.
+// For simplicity and security, we define it here. Price is in cents.
+const packages = [
+    { id: 1, points: 100, price: 500 },   // $5.00
+    { id: 2, points: 250, price: 1000 },  // $10.00
+    { id: 3, points: 300, price: 100 },   // $1.00 (for testing)
+    { id: 4, points: 1500, price: 4000 }, // $40.00
+];
+
 // --- Database Initialization ---
 const initializeDb = async () => {
     const client = await pool.connect();
@@ -59,6 +69,28 @@ const initializeDb = async () => {
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
+// --- Auth Middleware ---
+const authenticateToken = async (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (token == null) return res.sendStatus(401);
+
+    try {
+        const userId = parseInt(token);
+        if (isNaN(userId)) return res.sendStatus(401);
+
+        const result = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+        if (result.rows.length === 0) {
+            return res.sendStatus(403);
+        }
+        req.user = result.rows[0];
+        next();
+    } catch (err) {
+        console.error("Auth middleware error:", err);
+        res.sendStatus(500);
+    }
+};
+
 
 // --- API Routes ---
 
@@ -74,15 +106,14 @@ app.post('/api/register', async (req, res) => {
         const userCountResult = await pool.query('SELECT COUNT(*) FROM users');
         const isFirstUser = parseInt(userCountResult.rows[0].count) === 0;
 
-        // In a real app, you MUST hash the password. For simplicity, we are storing it plain.
+        // In a real app, you MUST hash the password.
         const result = await pool.query(
             'INSERT INTO users (email, password, country, is_admin) VALUES ($1, $2, $3, $4) RETURNING id, email, country, points, is_admin, status',
             [email, password, country, isFirstUser]
         );
         
         const user = result.rows[0];
-        // In a real app, you would generate a JWT (JSON Web Token) here.
-        // For simplicity, we'll use the user ID as a token.
+        // For simplicity, we'll use the user ID as a token. Use JWT in production.
         const token = user.id.toString(); 
 
         res.status(201).json({ message: 'User registered successfully', user, token });
@@ -105,7 +136,6 @@ app.post('/api/login', async (req, res) => {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
         const user = result.rows[0];
-        // In a real app, you would compare hashed passwords.
         if (user.password !== password) {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
@@ -114,7 +144,6 @@ app.post('/api/login', async (req, res) => {
         }
         
         const token = user.id.toString();
-        // Don't send the password back
         delete user.password;
         res.status(200).json({ message: 'Login successful', user, token });
 
@@ -124,22 +153,94 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// A placeholder for fetching user data based on a token
-app.get('/api/users/me', async (req, res) => {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-        return res.status(401).json({ message: 'No token provided' });
-    }
+// Fetch user data based on a token
+app.get('/api/users/me', authenticateToken, async (req, res) => {
+    const user = req.user;
+    delete user.password;
+    res.json({ user });
+});
+
+// Update user profile
+app.put('/api/users/me', authenticateToken, async (req, res) => {
+    const { email, password } = req.body;
+    const userId = req.user.id;
+    
     try {
-        const userId = parseInt(token);
-        const result = await pool.query('SELECT id, email, country, points, is_admin, status FROM users WHERE id = $1', [userId]);
-         if (result.rows.length > 0) {
-            res.json({ user: result.rows[0] });
+        let query;
+        let queryParams;
+        if (password) {
+            query = 'UPDATE users SET email = $1, password = $2 WHERE id = $3 RETURNING id, email, country, points, is_admin, status';
+            queryParams = [email, password, userId];
         } else {
-            res.status(404).json({ message: 'User not found' });
+            query = 'UPDATE users SET email = $1 WHERE id = $2 RETURNING id, email, country, points, is_admin, status';
+            queryParams = [email, userId];
         }
+        const result = await pool.query(query, queryParams);
+        res.json({ user: result.rows[0] });
     } catch(err) {
-        res.status(500).json({ message: 'Server error' });
+        console.error(err);
+        res.status(500).json({ message: 'Error updating profile' });
+    }
+});
+
+// Deduct points for an operation
+app.post('/api/users/deduct-points', authenticateToken, async (req, res) => {
+    const { amount } = req.body;
+    const userId = req.user.id;
+
+    if (req.user.points < amount) {
+        return res.status(402).json({ message: 'Insufficient points' });
+    }
+
+    try {
+        const result = await pool.query(
+            'UPDATE users SET points = points - $1 WHERE id = $2 RETURNING id, email, country, points, is_admin, status',
+            [amount, userId]
+        );
+        res.json({ user: result.rows[0] });
+    } catch(err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error updating points' });
+    }
+});
+
+// Create Stripe Checkout Session
+app.post('/api/create-checkout-session', authenticateToken, async (req, res) => {
+    const { packageId } = req.body;
+    const user = req.user;
+
+    const pkg = packages.find(p => p.id === packageId);
+    if (!pkg) {
+        return res.status(404).json({ message: 'Package not found.' });
+    }
+
+    try {
+        const session = await stripe.checkout.sessions.create({
+            payment_method_types: ['card'],
+            line_items: [{
+                price_data: {
+                    currency: 'usd',
+                    product_data: {
+                        name: `${pkg.points} Points Package`,
+                        description: `Get ${pkg.points} points for your Tomato AI account.`,
+                    },
+                    unit_amount: pkg.price,
+                },
+                quantity: 1,
+            }],
+            mode: 'payment',
+            success_url: `https://tomato-ai-154300777659.us-west1.run.app/?payment_success=true#store`,
+            cancel_url: `https://tomato-ai-154300777659.us-west1.run.app/?payment_cancelled=true#store`,
+            customer_email: user.email,
+            metadata: {
+                userEmail: user.email,
+                pointsToAdd: pkg.points.toString(),
+            }
+        });
+        res.json({ url: session.url });
+    } catch (err) {
+        console.error("Stripe session creation error:", err);
+        res.status(500).json({ message: 'Failed to create payment session.' });
     }
 });
 
@@ -160,10 +261,8 @@ app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req,
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     
-    // The metadata should contain the user ID and points to add
-    const userId = session.metadata.userId;
-    const pointsToAdd = parseInt(session.metadata.points, 10);
-    const userEmail = session.customer_details.email; // Get email from the session
+    const userEmail = session.metadata.userEmail;
+    const pointsToAdd = parseInt(session.metadata.pointsToAdd, 10);
 
     if (userEmail && pointsToAdd) {
         console.log(`Payment successful for ${userEmail}. Attempting to add ${pointsToAdd} points.`);
@@ -181,7 +280,7 @@ app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req,
             console.error('Error updating user points from webhook:', err);
         }
     } else {
-        console.warn('Webhook received without required metadata (userEmail, points).');
+        console.warn('Webhook received without required metadata (userEmail, pointsToAdd).');
     }
   }
 
@@ -189,9 +288,9 @@ app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req,
 });
 
 
-// --- Admin Routes (Add middleware later for real security) ---
-app.get('/api/admin/users', async (req, res) => {
-    // In a real app, you'd verify the user is an admin from their token
+// --- Admin Routes ---
+app.get('/api/admin/users', authenticateToken, async (req, res) => {
+    if (!req.user.is_admin) return res.sendStatus(403);
     try {
         const result = await pool.query('SELECT id, email, country, points, is_admin, status FROM users ORDER BY id');
         res.json({ users: result.rows });
@@ -200,25 +299,27 @@ app.get('/api/admin/users', async (req, res) => {
     }
 });
 
-app.put('/api/admin/users/:id', async (req, res) => {
+app.put('/api/admin/users/:id', authenticateToken, async (req, res) => {
+     if (!req.user.is_admin) return res.sendStatus(403);
      const { id } = req.params;
-     const { points, status } = req.body; // points is the amount to add/subtract
+     const { points, status } = req.body;
      try {
         const result = await pool.query(
-            'UPDATE users SET points = points + $1, status = $2 WHERE id = $3 RETURNING id, email, country, points, is_admin, status',
+            'UPDATE users SET points = points + $1, status = $2 WHERE id = $3 AND is_admin = FALSE RETURNING id, email, country, points, is_admin, status',
             [points, status, id]
         );
         if (result.rowCount > 0) {
             res.json({ user: result.rows[0] });
         } else {
-            res.status(404).json({ message: 'User not found' });
+            res.status(404).json({ message: 'User not found or is an admin' });
         }
      } catch (err) {
         res.status(500).json({ message: 'Failed to update user' });
      }
 });
 
-app.delete('/api/admin/users', async(req, res) => {
+app.delete('/api/admin/users', authenticateToken, async(req, res) => {
+    if (!req.user.is_admin) return res.sendStatus(403);
     try {
         await pool.query("DELETE FROM users WHERE is_admin = FALSE");
         res.status(200).json({message: 'All non-admin users deleted.'});
