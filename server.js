@@ -136,6 +136,9 @@ const defaultSettings = {
         enabled: false,
         message_ar: "🚧 الموقع قيد الصيانة حاليًا 🚧\n\nنحن نعمل بجد لتحسين تجربتك. سنعود قريبًا!",
         message_en: "🚧 Site is Currently Under Maintenance 🚧\n\nWe're working hard to improve your experience. We will be back soon!"
+    },
+    recaptcha: {
+        enabled: false
     }
 };
 
@@ -422,9 +425,11 @@ app.post('/api/register', checkDb, async (req, res) => {
 
         const userCountResult = await client.query('SELECT COUNT(*) FROM users');
         const isFirstUser = parseInt(userCountResult.rows[0].count) === 0;
+        
+        const currentSettings = await getSettings();
 
-        // Only enforce reCAPTCHA if it's configured AND this is not the first user registration.
-        if (!isFirstUser && !recaptchaInitializationError) {
+        // Enforce reCAPTCHA if it's enabled in settings, the keys exist, and it's not the first user.
+        if (currentSettings.recaptcha?.enabled && !isFirstUser && !recaptchaInitializationError) {
             if (!recaptchaToken) {
                 return res.status(400).json({ message: 'Please complete the reCAPTCHA.' });
             }
@@ -455,7 +460,6 @@ app.post('/api/register', checkDb, async (req, res) => {
         }
         
         let referredById = null;
-        const currentSettings = await getSettings();
         if (referralCode) {
             const referrerRes = await client.query('SELECT id FROM users WHERE referral_code = $1', [referralCode]);
             if (referrerRes.rows.length > 0) {
@@ -465,10 +469,13 @@ app.post('/api/register', checkDb, async (req, res) => {
 
         const newUserPoints = referredById ? 10 + currentSettings.costs.referralBonus : 10;
         
+        // Generate a more random referral code to prevent unique constraint violations
+        const newReferralCode = crypto.randomBytes(8).toString('hex');
+
         const { rows } = await client.query(
             `INSERT INTO users (username, email, password, country, is_admin, status, referred_by, points, referral_code) 
              VALUES ($1, LOWER($2), $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-            [username, email, password, country, isFirstUser, 'active', referredById, newUserPoints, `${username}${crypto.randomBytes(3).toString('hex')}`]
+            [username, email, password, country, isFirstUser, 'active', referredById, newUserPoints, newReferralCode]
         );
         const newUser = rows[0];
 
@@ -879,9 +886,16 @@ app.get('/api/status', async (req, res) => {
         }
     }
     
-    const recaptcha_enabled = !recaptchaInitializationError;
-    const recaptcha_message = recaptcha_enabled ? 'reCAPTCHA is configured and active for registration.' : recaptchaInitializationError;
-    const recaptcha_message_ar = recaptcha_enabled ? 'نظام reCAPTCHA مُعد وجاهز للعمل لحماية التسجيل.' : "متغيرات بيئة reCAPTCHA غير مُعينة. التسجيل غير محمي ضد البوتات.";
+    const settings = await getSettings();
+    const recaptcha_enabled_from_settings = settings.recaptcha?.enabled === true;
+    const recaptcha_enabled = !recaptchaInitializationError && recaptcha_enabled_from_settings;
+    
+    let recaptcha_message = recaptchaInitializationError;
+    let recaptcha_message_ar = "متغيرات بيئة reCAPTCHA غير مُعينة. التسجيل غير محمي ضد البوتات.";
+    if (!recaptchaInitializationError) {
+        recaptcha_message = recaptcha_enabled ? 'reCAPTCHA is configured and active.' : 'reCAPTCHA is disabled in the admin dashboard.';
+        recaptcha_message_ar = recaptcha_enabled ? 'نظام reCAPTCHA مُعد وجاهز للعمل لحماية التسجيل.' : 'تم تعطيل reCAPTCHA من لوحة التحكم.';
+    }
 
     res.json({
         ai_enabled: ai_enabled,
