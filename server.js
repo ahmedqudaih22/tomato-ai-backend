@@ -146,9 +146,12 @@ const initializeDbSchema = async () => {
     }
     const client = await pool.connect();
     try {
+        await client.query('BEGIN');
+
         await client.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
+                username VARCHAR(50) UNIQUE NOT NULL,
                 email VARCHAR(255) UNIQUE NOT NULL,
                 password VARCHAR(255) NOT NULL,
                 country VARCHAR(10),
@@ -157,14 +160,27 @@ const initializeDbSchema = async () => {
                 status VARCHAR(20) DEFAULT 'active',
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 last_daily_claim TIMESTAMP WITH TIME ZONE,
-                verification_code TEXT,
-                verification_expires TIMESTAMP WITH TIME ZONE,
                 session_token TEXT UNIQUE,
                 token_expires_at TIMESTAMP WITH TIME ZONE,
                 referral_code TEXT UNIQUE,
                 referred_by INTEGER REFERENCES users(id)
             );
         `);
+
+        // ONE-TIME MIGRATION & RESET (as requested)
+        const columnsRes = await client.query(`SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'username'`);
+        if (columnsRes.rows.length === 0) {
+            console.log("Schema migration required: 'username' column not found.");
+            // Remove columns that are no longer needed for a cleaner schema
+            await client.query('ALTER TABLE users DROP COLUMN IF EXISTS verification_code, DROP COLUMN IF EXISTS verification_expires');
+            // Add the new username column
+            await client.query('ALTER TABLE users ADD COLUMN username VARCHAR(50) UNIQUE');
+            console.log("Schema updated: 'username' column added, verification columns removed.");
+
+            // This is the destructive part requested by the user.
+            await client.query('TRUNCATE TABLE users CASCADE');
+            console.log("!!! DATABASE RESET !!! User table truncated for a fresh start. The first user to register will be an admin.");
+        }
 
         await client.query(`
             CREATE TABLE IF NOT EXISTS settings (
@@ -192,12 +208,15 @@ const initializeDbSchema = async () => {
         } else {
             console.log("Database schema is ready.");
         }
+        await client.query('COMMIT');
     } catch (err) {
+        await client.query('ROLLBACK');
         console.error("Error initializing database schema:", err);
     } finally {
         client.release();
     }
 };
+
 
 let settingsCache = null;
 const getSettings = async () => {
@@ -358,7 +377,7 @@ const authenticateToken = async (req, res, next) => {
         client = await pool.connect();
         const result = await client.query(
             `SELECT 
-                u.id, u.email, u.country, u.points, u.is_admin, u.status, u.last_daily_claim, u.referral_code,
+                u.id, u.username, u.email, u.country, u.points, u.is_admin, u.status, u.last_daily_claim, u.referral_code,
                 (SELECT COUNT(*) FROM users WHERE referred_by = u.id) as referrals
              FROM users u
              WHERE u.session_token = $1 AND u.token_expires_at > NOW()`,
@@ -393,8 +412,10 @@ app.get('/api/config', (req, res) => {
 });
 
 app.post('/api/register', checkDb, async (req, res) => {
-    const { email, password, country, recaptchaToken, referralCode } = req.body;
-    if (!email || !password) return res.status(400).json({ message: 'Email and password are required.' });
+    const { username, email, password, country, recaptchaToken, referralCode } = req.body;
+    if (!username || !email || !password) return res.status(400).json({ message: 'Username, email and password are required.' });
+    if (username.length < 3) return res.status(400).json({ message: 'Username must be at least 3 characters.'});
+
 
     if (!recaptchaInitializationError) {
         if (!recaptchaToken) {
@@ -418,10 +439,16 @@ app.post('/api/register', checkDb, async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        const existingUser = await client.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
+        const existingUser = await client.query('SELECT email, username FROM users WHERE LOWER(email) = LOWER($1) OR LOWER(username) = LOWER($2)', [email, username]);
         if (existingUser.rows.length > 0) {
             await client.query('ROLLBACK');
-            return res.status(409).json({ message: 'Email already exists.' });
+            const user = existingUser.rows[0];
+            if (user.email.toLowerCase() === email.toLowerCase()) {
+                return res.status(409).json({ message: 'Email already exists.' });
+            }
+            if (user.username.toLowerCase() === username.toLowerCase()) {
+                return res.status(409).json({ message: 'Username already exists.' });
+            }
         }
         
         const userCountResult = await client.query('SELECT COUNT(*) FROM users');
@@ -439,9 +466,9 @@ app.post('/api/register', checkDb, async (req, res) => {
         const newUserPoints = referredById ? 10 + currentSettings.costs.referralBonus : 10;
         
         const { rows } = await client.query(
-            `INSERT INTO users (email, password, country, is_admin, status, referred_by, points, referral_code) 
-             VALUES (LOWER($1), $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-            [email, password, country, isFirstUser, 'active', referredById, newUserPoints, `${email.split('@')[0]}${crypto.randomBytes(3).toString('hex')}`]
+            `INSERT INTO users (username, email, password, country, is_admin, status, referred_by, points, referral_code) 
+             VALUES ($1, LOWER($2), $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+            [username, email, password, country, isFirstUser, 'active', referredById, newUserPoints, `${username}${crypto.randomBytes(3).toString('hex')}`]
         );
         const newUser = rows[0];
 
@@ -474,19 +501,22 @@ app.post('/api/register', checkDb, async (req, res) => {
 
 
 app.post('/api/login', checkDb, async (req, res) => {
-    const { email, password } = req.body;
+    const { identifier, password } = req.body;
     const client = await pool.connect();
     try {
-        const result = await client.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
-        if (result.rows.length === 0) return res.status(401).json({ message: 'Invalid credentials' });
+        const result = await client.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1) OR LOWER(username) = LOWER($1)', [identifier]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'Account not found.' });
+        }
         
         const user = result.rows[0];
-        if (user.password !== password) return res.status(401).json({ message: 'Invalid credentials' });
-        
-        if (user.status === 'pending') {
-            return res.status(401).json({ message: 'Your account is not verified. Please contact support.', code: 'ACCOUNT_NOT_VERIFIED' });
+        if (user.password !== password) {
+            return res.status(401).json({ message: 'Incorrect password.' });
         }
-        if (user.status === 'banned') return res.status(403).json({ message: 'This account is banned.' });
+        
+        if (user.status === 'banned') {
+            return res.status(403).json({ message: 'This account is banned.' });
+        }
         
         const token = await generateAndSetToken(user.id, client);
         
@@ -515,7 +545,7 @@ app.put('/api/users/me', checkDb, authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
         let query, queryParams;
-        const returnFields = 'id, email, country, points, is_admin, status, last_daily_claim';
+        const returnFields = 'id, username, email, country, points, is_admin, status, last_daily_claim';
         if (password) {
             query = `UPDATE users SET email = LOWER($1), password = $2 WHERE id = $3 RETURNING ${returnFields}`;
             queryParams = [email, password, userId];
@@ -527,6 +557,9 @@ app.put('/api/users/me', checkDb, authenticateToken, async (req, res) => {
         res.json({ user: result.rows[0] });
     } catch(err) {
         console.error("Profile update error:", err);
+        if (err.code === '23505' && err.constraint.includes('email')) {
+             return res.status(409).json({ message: 'This email is already in use.' });
+        }
         res.status(500).json({ message: 'Error updating profile' });
     }
 });
@@ -577,7 +610,7 @@ app.post('/api/ai/generate', checkDb, checkAi, authenticateToken, async (req, re
             throw new Error('Invalid AI operation type');
         }
         
-        const userResult = await client.query('SELECT id, email, country, points, is_admin, status, last_daily_claim FROM users WHERE id = $1', [userId]);
+        const userResult = await client.query('SELECT id, username, email, country, points, is_admin, status, last_daily_claim FROM users WHERE id = $1', [userId]);
         await client.query('COMMIT');
         
         const user = userResult.rows[0];
@@ -627,7 +660,7 @@ app.post('/api/claim-daily-reward', checkDb, authenticateToken, async (req, res)
         const pointsToAdd = settings.costs.dailyRewardPoints || 10;
 
         const result = await pool.query(
-            'UPDATE users SET points = points + $1, last_daily_claim = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, email, country, points, is_admin, status, last_daily_claim',
+            'UPDATE users SET points = points + $1, last_daily_claim = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, username, email, country, points, is_admin, status, last_daily_claim',
             [pointsToAdd, userId]
         );
         const user = result.rows[0];
@@ -726,7 +759,7 @@ app.get('/api/admin/users', checkDb, authenticateToken, isAdmin, async (req, res
     let client;
     try {
         client = await pool.connect();
-        const result = await client.query('SELECT id, email, country, points, is_admin, status, last_daily_claim FROM users ORDER BY id');
+        const result = await client.query('SELECT id, username, email, country, points, is_admin, status, last_daily_claim FROM users ORDER BY id');
         res.json({ users: result.rows });
     } catch (err) {
         console.error("Error fetching admin users list:", err);
@@ -747,7 +780,7 @@ app.put('/api/admin/users/:id', checkDb, authenticateToken, isAdmin, async (req,
              return res.status(403).json({ message: 'Admins cannot ban themselves.' });
         }
         const result = await pool.query(
-            'UPDATE users SET points = points + $1, status = $2 WHERE id = $3 RETURNING id, email, country, points, is_admin, status, last_daily_claim',
+            'UPDATE users SET points = points + $1, status = $2 WHERE id = $3 RETURNING id, username, email, country, points, is_admin, status, last_daily_claim',
             [points, status, targetUserId]
         );
         res.json({ user: result.rows[0] });
