@@ -334,7 +334,11 @@ app.post('/api/ai/generate', authenticateToken, async (req, res) => {
 
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error("AI Generation Error:", err);
+        console.error("AI Generation Error:", err.message);
+        if (err.cause) {
+            console.error("Error Cause:", err.cause);
+        }
+        console.error("Error Stack:", err.stack);
         res.status(500).json({ message: err.message || 'An error occurred during AI generation.' });
     } finally {
         client.release();
