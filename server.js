@@ -66,12 +66,16 @@ if (process.env.API_KEY) {
     console.warn(aiInitializationError);
 }
 
+const MAILERSEND_API_TOKEN = process.env.MAILERSEND_API_TOKEN;
+const MAILERSEND_SENDER_EMAIL = process.env.MAILERSEND_SENDER_EMAIL;
+let mailerSendInitializationError = null;
+if (!MAILERSEND_API_TOKEN || !MAILERSEND_SENDER_EMAIL) {
+    mailerSendInitializationError = "MailerSend environment variables (MAILERSEND_API_TOKEN, MAILERSEND_SENDER_EMAIL) are not set. Email verification is disabled.";
+    console.warn(mailerSendInitializationError);
+}
+
 // --- Middleware ---
 
-// Enable CORS for all origins. This is a simple setup.
-// For stricter security in a final production environment, you might want to
-// restrict this to your specific frontend domain, like so:
-// app.use(cors({ origin: 'https://tomato-ai-15430077659.us-west1.run.app' }));
 app.use(cors());
 
 app.use((req, res, next) => {
@@ -98,12 +102,42 @@ const checkAi = (req, res, next) => {
 
 
 const defaultSettings = {
-    costs: { imageEdit: 2, imageCreate: 5, textToSpeech: 1 },
+    costs: { imageEdit: 2, imageCreate: 5, textToSpeech: 1, dailyRewardPoints: 10 },
     referralBonus: 50,
-    theme: { logoUrl: "https://i.ibb.co/mH2WvTz/tomato-logo.png", logoWidth: 150, logoHeight: 50, logoAlign: 'center', primaryColor: "#FF6B6B", secondaryColor: "#2EC4B6", navbarColor: "#FFFFFF", navTextColor: "#2A323C" },
-    content: { siteNameAr: "Tomato AI", siteNameEn: "Tomato AI", heroTitleAr: "أدوات ذكاء اصطناعي قوية لإبداعك", heroTitleEn: "Powerful AI Tools for Your Creativity", heroSubtitleAr: "حرر، أنشئ، وحول أفكارك إلى واقع بسهولة.", heroSubtitleEn: "Edit, create, and bring your ideas to life with ease." },
+    theme: { 
+        logoUrl: "https://i.ibb.co/mH2WvTz/tomato-logo.png", 
+        logoWidth: 150, 
+        logoHeight: 40,
+        primaryColor: "#FF6B6B", 
+        secondaryColor: "#2EC4B6", 
+        navbarColor: "#FFFFFF", 
+        navTextColor: "#2A323C",
+        buttonPadding: 8,
+        sliderHeight: 450,
+    },
+    content: { 
+        siteNameAr: "Tomato AI", siteNameEn: "Tomato AI",
+        slider: {
+            slide1: { image: "https://i.ibb.co/V9Z2xN3/slide1.png", title_ar: "إنشاء صور بالذكاء الاصطناعي", title_en: "AI Image Generation", text_ar: "حول كلماتك إلى روائع بصرية مذهلة.", text_en: "Turn your words into stunning visual masterpieces." },
+            slide2: { image: "https://i.ibb.co/yQj5d5h/slide2.png", title_ar: "تعديل الصور بسهولة", title_en: "Effortless Image Editing", text_ar: "قم بإجراء تعديلات معقدة باستخدام أوامر نصية بسيطة.", text_en: "Make complex edits with simple text commands." },
+            slide3: { image: "https://i.ibb.co/GvxBf2T/tts-placeholder.jpg", title_ar: "تحويل النص إلى صوت واقعي", title_en: "Realistic Text-to-Speech", text_ar: "أنشئ تعليقات صوتية طبيعية لأي نص.", text_en: "Create natural-sounding voiceovers for any text." }
+        },
+        cta: {
+            title_ar: "أدوات ذكاء اصطناعي قوية لإبداعك",
+            title_en: "Powerful AI Tools For Your Creativity",
+            subtitle_ar: "حرر، أنشئ، وحول أفكارك إلى واقع بسهولة.",
+            subtitle_en: "Unleash, create, and turn your ideas into reality easily.",
+            button_ar: "ابدأ الإبداع الآن",
+            button_en: "Start Creating Now",
+            background_image: "https://i.ibb.co/wzR06pM/cta-bg.png"
+        }
+    },
     store: { packages: [{ id: 1, points: 100, price: 5 }, { id: 2, points: 250, price: 10 }, { id: 3, points: 300, price: 1 }, { id: 4, points: 1500, price: 40 }] },
-    announcement: { enabled: false, imageUrl: "", contentAr: "<h1>عرض خاص!</h1><p>احصل على ضعف النقاط عند الشراء هذا الأسبوع.</p>", contentEn: "<h1>Special Offer!</h1><p>Get double the points on all purchases this week.</p>" }
+    announcement: { 
+        enabled: false, imageUrl: "", contentAr: "<h1>عرض خاص!</h1><p>احصل على ضعف النقاط عند الشراء هذا الأسبوع.</p>", 
+        contentEn: "<h1>Special Offer!</h1><p>Get double the points on all purchases this week.</p>",
+        textColor: "#000000", fontSize: 16
+    }
 };
 
 const initializeDbSchema = async () => {
@@ -121,10 +155,20 @@ const initializeDbSchema = async () => {
                 country VARCHAR(10),
                 points INTEGER DEFAULT 10,
                 is_admin BOOLEAN DEFAULT FALSE,
-                status VARCHAR(20) DEFAULT 'active',
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                status VARCHAR(20) DEFAULT 'pending',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                last_daily_claim TIMESTAMP WITH TIME ZONE,
+                verification_code TEXT,
+                verification_expires TIMESTAMP WITH TIME ZONE
             );
         `);
+        
+        const verificationCodeCol = await client.query("SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='verification_code'");
+        if (verificationCodeCol.rows.length === 0) {
+            await client.query("ALTER TABLE users ADD COLUMN verification_code TEXT, ADD COLUMN verification_expires TIMESTAMP WITH TIME ZONE, ALTER COLUMN status SET DEFAULT 'pending'");
+            console.log("Added verification columns and updated status default in users table.");
+        }
+
         await client.query(`
             CREATE TABLE IF NOT EXISTS settings (
                 id INT PRIMARY KEY DEFAULT 1,
@@ -144,6 +188,50 @@ const initializeDbSchema = async () => {
         client.release();
     }
 };
+
+const sendVerificationEmail = async (email, code) => {
+    if (!MAILERSEND_API_TOKEN) {
+        console.error("Cannot send email: MailerSend is not configured.");
+        console.log(`--- DEV ONLY: Verification code for ${email} is ${code} ---`);
+        return;
+    }
+
+    const emailPayload = {
+        from: { email: MAILERSEND_SENDER_EMAIL, name: "Tomato AI" },
+        to: [{ email }],
+        subject: `Your Verification Code for Tomato AI`,
+        html: `
+            <div style="font-family: Arial, sans-serif; text-align: center; color: #333;">
+                <h2>Welcome to Tomato AI!</h2>
+                <p>Your verification code is:</p>
+                <p style="font-size: 24px; font-weight: bold; letter-spacing: 5px; background: #f0f0f0; padding: 10px 20px; border-radius: 5px; display: inline-block;">${code}</p>
+                <p>This code will expire in 15 minutes.</p>
+                <p style="font-size: 12px; color: #888;">If you did not request this, please ignore this email.</p>
+            </div>
+        `
+    };
+
+    try {
+        const response = await fetch('https://api.mailersend.com/v1/email', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${MAILERSEND_API_TOKEN}`
+            },
+            body: JSON.stringify(emailPayload)
+        });
+        if (!response.ok) {
+            const errorBody = await response.json();
+            console.error('MailerSend API Error:', errorBody);
+            throw new Error('Failed to send verification email.');
+        }
+        console.log(`Verification email sent to ${email}`);
+    } catch (error) {
+        console.error('Error sending verification email:', error);
+        throw error;
+    }
+};
+
 
 const authenticateToken = async (req, res, next) => {
     if (!pool) return res.status(503).json({ message: dbInitializationError });
@@ -175,37 +263,125 @@ const isAdmin = (req, res, next) => {
 app.post('/api/register', checkDb, async (req, res) => {
     const { email, password, country } = req.body;
     if (!email || !password) return res.status(400).json({ message: 'Email and password are required.' });
+    
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const verificationExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes from now
+
     try {
+        const existingUser = await pool.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
+        if (existingUser.rows.length > 0) {
+            if (existingUser.rows[0].status === 'pending') {
+                 await pool.query(
+                    'UPDATE users SET verification_code = $1, verification_expires = $2 WHERE id = $3',
+                    [verificationCode, verificationExpires, existingUser.rows[0].id]
+                );
+                await sendVerificationEmail(email, verificationCode);
+                return res.status(200).json({ message: 'Account already exists. A new verification code has been sent.', email });
+            } else {
+                 return res.status(409).json({ message: 'Email already exists.' });
+            }
+        }
+        
         const userCountResult = await pool.query('SELECT COUNT(*) FROM users');
         const isFirstUser = parseInt(userCountResult.rows[0].count) === 0;
-        const result = await pool.query(
-            'INSERT INTO users (email, password, country, is_admin) VALUES (LOWER($1), $2, $3, $4) RETURNING id, email, country, points, is_admin, status',
-            [email, password, country, isFirstUser]
+
+        await pool.query(
+            'INSERT INTO users (email, password, country, is_admin, status, verification_code, verification_expires) VALUES (LOWER($1), $2, $3, $4, $5, $6, $7)',
+            [email, password, country, isFirstUser, isFirstUser ? 'active' : 'pending', verificationCode, verificationExpires]
         );
-        const user = result.rows[0];
-        const token = user.id.toString();
-        res.status(201).json({ message: 'User registered successfully', user, token });
+        
+        if (!isFirstUser) {
+           await sendVerificationEmail(email, verificationCode);
+        }
+
+        res.status(201).json({ message: 'Registration successful! Please check your email to verify your account.', email });
     } catch (err) {
-        if (err.code === '23505') return res.status(409).json({ message: 'Email already exists.' });
         console.error("Registration Error:", err);
         res.status(500).json({ message: 'Internal server error' });
     }
 });
+
 
 app.post('/api/login', checkDb, async (req, res) => {
     const { email, password } = req.body;
     try {
         const result = await pool.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
         if (result.rows.length === 0) return res.status(401).json({ message: 'Invalid credentials' });
+        
         const user = result.rows[0];
         if (user.password !== password) return res.status(401).json({ message: 'Invalid credentials' });
+        
+        if (user.status === 'pending') {
+            return res.status(401).json({ message: 'Your account is not verified. Please check your email for the verification code.', code: 'ACCOUNT_NOT_VERIFIED' });
+        }
         if (user.status === 'banned') return res.status(403).json({ message: 'This account is banned.' });
+        
         const token = user.id.toString();
         delete user.password;
+        delete user.verification_code;
+        delete user.verification_expires;
         res.status(200).json({ message: 'Login successful', user, token });
     } catch (err) {
         console.error("Login error:", err);
         res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
+app.post('/api/verify-email', checkDb, async (req, res) => {
+    const { email, code } = req.body;
+    try {
+        const result = await pool.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND status = $2', [email, 'pending']);
+        if (result.rows.length === 0) return res.status(400).json({ message: 'Invalid request or account already verified.' });
+
+        const user = result.rows[0];
+        const now = new Date();
+
+        if (user.verification_code !== code || user.verification_expires < now) {
+            return res.status(400).json({ message: 'Invalid or expired verification code.' });
+        }
+        
+        const updateResult = await pool.query(
+            "UPDATE users SET status = 'active', verification_code = NULL, verification_expires = NULL WHERE id = $1 RETURNING *",
+            [user.id]
+        );
+        
+        const verifiedUser = updateResult.rows[0];
+        const token = verifiedUser.id.toString();
+        delete verifiedUser.password;
+        delete verifiedUser.verification_code;
+        delete verifiedUser.verification_expires;
+
+        res.status(200).json({ message: 'Account verified successfully.', user: verifiedUser, token });
+
+    } catch (err) {
+        console.error("Verification error:", err);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+
+app.post('/api/resend-verification', checkDb, async (req, res) => {
+    const { email } = req.body;
+    try {
+        const result = await pool.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND status = $2', [email, 'pending']);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'No pending account found for this email.' });
+        }
+        
+        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const verificationExpires = new Date(Date.now() + 15 * 60 * 1000);
+
+        await pool.query(
+            'UPDATE users SET verification_code = $1, verification_expires = $2 WHERE email = LOWER($3)',
+            [verificationCode, verificationExpires, email]
+        );
+        
+        await sendVerificationEmail(email, verificationCode);
+        
+        res.status(200).json({ message: 'A new verification code has been sent.' });
+
+    } catch (err) {
+        console.error("Resend verification error:", err);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 });
 
@@ -220,11 +396,12 @@ app.put('/api/users/me', checkDb, authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
         let query, queryParams;
+        const returnFields = 'id, email, country, points, is_admin, status, last_daily_claim';
         if (password) {
-            query = 'UPDATE users SET email = LOWER($1), password = $2 WHERE id = $3 RETURNING id, email, country, points, is_admin, status';
+            query = `UPDATE users SET email = LOWER($1), password = $2 WHERE id = $3 RETURNING ${returnFields}`;
             queryParams = [email, password, userId];
         } else {
-            query = 'UPDATE users SET email = LOWER($1) WHERE id = $2 RETURNING id, email, country, points, is_admin, status';
+            query = `UPDATE users SET email = LOWER($1) WHERE id = $2 RETURNING ${returnFields}`;
             queryParams = [email, userId];
         }
         const result = await pool.query(query, queryParams);
@@ -301,13 +478,14 @@ app.post('/api/ai/remove-background', checkAi, authenticateToken, isAdmin, async
         const { imagePart, textPart } = req.body;
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash-image',
-            contents: { parts: [imagePart, textPart] },
+            contents: [{ parts: [imagePart, textPart] }],
             config: { responseModalities: ['IMAGE'] },
         });
         const firstPart = response.candidates?.[0]?.content?.parts?.[0];
         if (firstPart?.inlineData) {
             res.json({ dataUrl: `data:${firstPart.inlineData.mimeType};base64,${firstPart.inlineData.data}` });
         } else {
+            console.error("Unexpected BG Removal Response:", JSON.stringify(response, null, 2));
             throw new Error("AI background removal failed to return an image.");
         }
     } catch (err) {
@@ -315,6 +493,34 @@ app.post('/api/ai/remove-background', checkAi, authenticateToken, isAdmin, async
         res.status(500).json({ message: err.message || 'Failed to remove background.' });
     }
 });
+
+app.post('/api/claim-daily-reward', checkDb, authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    const lastClaim = req.user.last_daily_claim ? new Date(req.user.last_daily_claim).getTime() : 0;
+    const now = Date.now();
+    const twentyFourHours = 24 * 60 * 60 * 1000;
+
+    if (now - lastClaim < twentyFourHours) {
+        return res.status(429).json({ message: 'You can only claim the daily reward once every 24 hours.' });
+    }
+    
+    try {
+        const settingsRes = await pool.query('SELECT config FROM settings WHERE id = 1');
+        const pointsToAdd = settingsRes.rows[0].config.costs.dailyRewardPoints || 10;
+
+        const result = await pool.query(
+            'UPDATE users SET points = points + $1, last_daily_claim = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+            [pointsToAdd, userId]
+        );
+        const user = result.rows[0];
+        delete user.password;
+        res.status(200).json({ message: `You have claimed ${pointsToAdd} points!`, user });
+    } catch (err) {
+        console.error("Daily reward claim error:", err);
+        res.status(500).json({ message: 'Internal server error during reward claim.' });
+    }
+});
+
 
 app.get('/api/settings', checkDb, async (req, res) => {
     try {
@@ -405,7 +611,7 @@ app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req,
 
 app.get('/api/admin/users', checkDb, authenticateToken, isAdmin, async (req, res) => {
     try {
-        const result = await pool.query('SELECT id, email, country, points, is_admin, status FROM users ORDER BY id');
+        const result = await pool.query('SELECT id, email, country, points, is_admin, status, last_daily_claim FROM users ORDER BY id');
         res.json({ users: result.rows });
     } catch (err) {
         res.status(500).json({ message: 'Failed to fetch users' });
@@ -423,7 +629,7 @@ app.put('/api/admin/users/:id', checkDb, authenticateToken, isAdmin, async (req,
              return res.status(403).json({ message: 'Admins cannot ban themselves.' });
         }
         const result = await pool.query(
-            'UPDATE users SET points = points + $1, status = $2 WHERE id = $3 RETURNING id, email, country, points, is_admin, status',
+            'UPDATE users SET points = points + $1, status = $2 WHERE id = $3 RETURNING id, email, country, points, is_admin, status, last_daily_claim',
             [points, status, targetUserId]
         );
         res.json({ user: result.rows[0] });
@@ -431,15 +637,6 @@ app.put('/api/admin/users/:id', checkDb, authenticateToken, isAdmin, async (req,
         console.error("Admin user update error:", err);
         res.status(500).json({ message: 'Failed to update user' });
      }
-});
-
-app.delete('/api/admin/users', checkDb, authenticateToken, isAdmin, async(req, res) => {
-    try {
-        await pool.query("DELETE FROM users WHERE is_admin = FALSE");
-        res.status(200).json({message: 'All non-admin users deleted.'});
-    } catch(err) {
-        res.status(500).json({message: 'Failed to delete users'});
-    }
 });
 
 app.get('/api/status', async (req, res) => {
@@ -478,6 +675,5 @@ app.get('/api/status', async (req, res) => {
 // --- Start Server ---
 app.listen(port, async () => {
     console.log(`Server listening on port ${port}`);
-    // Initialize the DB schema after the server starts listening
     await initializeDbSchema();
 });
