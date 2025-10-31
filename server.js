@@ -221,13 +221,21 @@ const sendVerificationEmail = async (email, code) => {
             body: JSON.stringify(emailPayload)
         });
         if (!response.ok) {
-            const errorBody = await response.json();
-            console.error('MailerSend API Error:', errorBody);
-            throw new Error('Failed to send verification email.');
+            let errorDetails = `Status: ${response.status} ${response.statusText}`;
+            try {
+                const errorBody = await response.json();
+                console.error('MailerSend API Error:', errorBody);
+                if (errorBody.message) {
+                    errorDetails = errorBody.message;
+                }
+            } catch (e) {
+                console.error('Could not parse MailerSend error response as JSON.');
+            }
+            throw new Error(`Failed to send verification email. ${errorDetails}`);
         }
         console.log(`Verification email sent to ${email}`);
     } catch (error) {
-        console.error('Error sending verification email:', error);
+        console.error('Error sending verification email:', error.message);
         throw error;
     }
 };
@@ -659,16 +667,30 @@ const sendTestEmail = async (email) => {
             },
             body: JSON.stringify(emailPayload)
         });
-        const responseBody = await response.json();
-        if (!response.ok) {
-            console.error('MailerSend API Error (Test):', responseBody);
-            throw { message: 'MailerSend API returned an error.', details: responseBody };
+
+        // Success responses (like 202 Accepted) may have no body.
+        if (response.ok) {
+            const messageId = response.headers.get('x-message-id');
+            console.log(`Test email sent successfully to ${email}. Message ID: ${messageId}`);
+            return { 
+                success: true, 
+                message: 'Test email sent successfully!', 
+                details: { status: response.status, statusText: response.statusText, messageId: messageId || 'Not provided' } 
+            };
+        } else {
+            // If not OK, there should be an error body with details.
+            const errorBody = await response.json();
+            console.error('MailerSend API Error (Test):', errorBody);
+            throw { message: 'MailerSend API returned an error.', details: errorBody };
         }
-        console.log(`Test email sent successfully to ${email}`);
-        return { success: true, message: 'Test email sent successfully!', details: responseBody };
     } catch (error) {
         console.error('Error sending test email:', error);
-        throw { message: 'Failed to send test email.', details: error.details || error.message || 'Unknown error' };
+        // If the error is from parsing, it means something unexpected happened.
+        if (error instanceof SyntaxError) {
+            throw { message: 'Received a non-JSON or malformed response from MailerSend.', details: error.message };
+        }
+        // Re-throw formatted error
+        throw { message: error.message || 'Failed to send test email.', details: error.details || error.message || 'Unknown error' };
     }
 };
 
