@@ -270,6 +270,7 @@ app.post('/api/ai/generate', authenticateToken, async (req, res) => {
         } else if (type === 'generateContent') {
             const response = await ai.models.generateContent(params);
             const firstPart = response.candidates?.[0]?.content?.parts?.[0];
+
             if (firstPart && firstPart.inlineData) {
                 const base64 = firstPart.inlineData.data;
                 const mimeType = firstPart.inlineData.mimeType;
@@ -279,7 +280,21 @@ app.post('/api/ai/generate', authenticateToken, async (req, res) => {
                     apiResult = { dataUrl: `data:${mimeType};base64,${base64}` };
                 }
             } else {
-                throw new Error("AI call did not return expected data.");
+                // Enhanced error handling
+                console.error("Unexpected Gemini response structure:", JSON.stringify(response, null, 2));
+
+                const blockReason = response.promptFeedback?.blockReason;
+                if (blockReason) {
+                    throw new Error(`Request was blocked by the safety filter. Reason: ${blockReason}`);
+                }
+
+                const finishReason = response.candidates?.[0]?.finishReason;
+                if (finishReason && finishReason !== 'STOP') {
+                    throw new Error(`AI generation stopped for an unexpected reason: ${finishReason}.`);
+                }
+                
+                // Fallback for other unexpected structures
+                throw new Error("AI call did not return expected data. The model's response was empty or in an unsupported format.");
             }
         } else {
             throw new Error('Invalid AI operation type');
