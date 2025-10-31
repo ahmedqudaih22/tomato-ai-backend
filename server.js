@@ -298,36 +298,53 @@ const isAdmin = (req, res, next) => {
 app.post('/api/register', checkDb, async (req, res) => {
     const { email, password, country } = req.body;
     if (!email || !password) return res.status(400).json({ message: 'Email and password are required.' });
-    
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const verificationExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes from now
 
     try {
+        // --- Handle existing user ---
         const existingUser = await pool.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
         if (existingUser.rows.length > 0) {
             const user = existingUser.rows[0];
-            if (user.status === 'pending') {
-                try {
-                    if (mailerSendInitializationError) throw new Error(mailerSendInitializationError);
-                    await sendVerificationEmail(email, verificationCode);
-                    await pool.query('UPDATE users SET verification_code = $1, verification_expires = $2 WHERE id = $3', [verificationCode, verificationExpires, user.id]);
-                    return res.status(200).json({ message: 'Account already exists. A new verification code has been sent.', email });
-                } catch (e) {
-                    console.warn(`Could not resend verification for ${email} due to mailer error. Auto-verifying.`);
-                    const { rows } = await pool.query("UPDATE users SET status = 'active', verification_code = NULL, verification_expires = NULL WHERE id = $1 RETURNING *", [user.id]);
-                    const verifiedUser = rows[0];
-                    const token = verifiedUser.id.toString();
-                    delete verifiedUser.password; delete verifiedUser.verification_code; delete verifiedUser.verification_expires;
-                    return res.status(200).json({ message: 'Account verified successfully due to an email system issue.', user: verifiedUser, token });
-                }
-            } else {
-                 return res.status(409).json({ message: 'Email already exists.' });
+            if (user.status !== 'pending') {
+                return res.status(409).json({ message: 'Email already exists.' });
+            }
+
+            // User exists and is pending. Decide whether to send email or auto-verify.
+            if (mailerSendInitializationError) {
+                console.warn(`Email service not configured. Auto-verifying existing pending user: ${email}`);
+                const { rows } = await pool.query("UPDATE users SET status = 'active', verification_code = NULL, verification_expires = NULL WHERE id = $1 RETURNING *", [user.id]);
+                const verifiedUser = rows[0];
+                const token = verifiedUser.id.toString();
+                delete verifiedUser.password; delete verifiedUser.verification_code; delete verifiedUser.verification_expires;
+                return res.status(200).json({ message: 'Account verified successfully due to an email system issue.', user: verifiedUser, token });
+            }
+            
+            // Email service seems configured, try to send a new code
+            try {
+                const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+                const verificationExpires = new Date(Date.now() + 15 * 60 * 1000);
+                await sendVerificationEmail(email, verificationCode);
+                await pool.query('UPDATE users SET verification_code = $1, verification_expires = $2 WHERE id = $3', [verificationCode, verificationExpires, user.id]);
+                return res.status(200).json({ message: 'Account already exists. A new verification code has been sent.', email });
+            } catch (e) {
+                // Fallback if configured mailer fails
+                console.warn(`Could not resend verification for ${email} due to mailer error. Auto-verifying.`);
+                const { rows } = await pool.query("UPDATE users SET status = 'active', verification_code = NULL, verification_expires = NULL WHERE id = $1 RETURNING *", [user.id]);
+                const verifiedUser = rows[0];
+                const token = verifiedUser.id.toString();
+                delete verifiedUser.password; delete verifiedUser.verification_code; delete verifiedUser.verification_expires;
+                return res.status(200).json({ message: 'Account verified successfully due to an email system issue.', user: verifiedUser, token });
             }
         }
         
+        // --- Handle new user ---
         const userCountResult = await pool.query('SELECT COUNT(*) FROM users');
         const isFirstUser = parseInt(userCountResult.rows[0].count) === 0;
-        const status = isFirstUser ? 'active' : 'pending';
+
+        const shouldAutoVerify = !!mailerSendInitializationError || isFirstUser;
+        const status = shouldAutoVerify ? 'active' : 'pending';
+        
+        const verificationCode = status === 'pending' ? Math.floor(100000 + Math.random() * 900000).toString() : null;
+        const verificationExpires = status === 'pending' ? new Date(Date.now() + 15 * 60 * 1000) : null;
 
         const { rows } = await pool.query(
             'INSERT INTO users (email, password, country, is_admin, status, verification_code, verification_expires) VALUES (LOWER($1), $2, $3, $4, $5, $6, $7) RETURNING *',
@@ -337,24 +354,24 @@ app.post('/api/register', checkDb, async (req, res) => {
 
         if (status === 'pending') {
             try {
-                if (mailerSendInitializationError) throw new Error(mailerSendInitializationError);
                 await sendVerificationEmail(email, verificationCode);
                 return res.status(201).json({ message: 'Registration successful! Please check your email to verify your account.', email });
             } catch (err) {
-                 console.error(`Verification email for ${email} failed: ${err.message}. Auto-verifying account.`);
+                 console.error(`Verification email for ${email} failed despite configuration: ${err.message}. Auto-verifying account.`);
                  const updateResult = await pool.query("UPDATE users SET status = 'active', verification_code = NULL, verification_expires = NULL WHERE id = $1 RETURNING *", [newUser.id]);
                  const verifiedUser = updateResult.rows[0];
                  const token = verifiedUser.id.toString();
                  delete verifiedUser.password; delete verifiedUser.verification_code; delete verifiedUser.verification_expires;
                  return res.status(201).json({ message: 'Registration successful! Your account has been automatically verified due to an email system issue.', user: verifiedUser, token: token });
             }
+        } else { // status === 'active'
+            const token = newUser.id.toString();
+            delete newUser.password; delete newUser.verification_code; delete newUser.verification_expires;
+            const message = isFirstUser 
+                ? 'Registration successful! You are now logged in.' 
+                : 'Registration successful! Your account has been automatically verified due to an email system issue.';
+            return res.status(201).json({ message, user: newUser, token });
         }
-
-        // isFirstUser case, already active
-        const token = newUser.id.toString();
-        delete newUser.password; delete newUser.verification_code; delete newUser.verification_expires;
-        res.status(201).json({ message: 'Registration successful! You are now logged in.', user: newUser, token });
-        
     } catch (err) {
         console.error("Registration Error:", err);
         res.status(500).json({ message: 'Internal server error' });
@@ -428,21 +445,32 @@ app.post('/api/resend-verification', checkDb, async (req, res) => {
         }
         
         const user = result.rows[0];
-        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-        const verificationExpires = new Date(Date.now() + 15 * 60 * 1000);
+        
+        // Explicit check for mailer configuration
+        if (mailerSendInitializationError) {
+            console.warn(`Email service not configured. Auto-verifying user on resend request: ${email}`);
+            const { rows } = await pool.query("UPDATE users SET status = 'active', verification_code = NULL, verification_expires = NULL WHERE id = $1 RETURNING *", [user.id]);
+            const verifiedUser = rows[0];
+            const token = verifiedUser.id.toString();
+            delete verifiedUser.password; delete verifiedUser.verification_code; delete verifiedUser.verification_expires;
+            return res.status(200).json({ message: 'Account verified successfully due to an email system issue.', user: verifiedUser, token });
+        }
 
+        // Email service seems configured, try sending
         try {
-            if (mailerSendInitializationError) throw new Error(mailerSendInitializationError);
+            const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+            const verificationExpires = new Date(Date.now() + 15 * 60 * 1000);
             await sendVerificationEmail(email, verificationCode);
             await pool.query('UPDATE users SET verification_code = $1, verification_expires = $2 WHERE id = $3', [verificationCode, verificationExpires, user.id]);
-            res.status(200).json({ message: 'A new verification code has been sent.' });
+            return res.status(200).json({ message: 'A new verification code has been sent.' });
         } catch (err) {
+            // Fallback for configured mailer failure
             console.warn(`Could not resend verification for ${email} due to mailer error. Auto-verifying.`);
             const { rows } = await pool.query("UPDATE users SET status = 'active', verification_code = NULL, verification_expires = NULL WHERE id = $1 RETURNING *", [user.id]);
             const verifiedUser = rows[0];
             const token = verifiedUser.id.toString();
             delete verifiedUser.password; delete verifiedUser.verification_code; delete verifiedUser.verification_expires;
-            res.status(200).json({ message: 'Account verified successfully due to an email system issue.', user: verifiedUser, token });
+            return res.status(200).json({ message: 'Account verified successfully due to an email system issue.', user: verifiedUser, token });
         }
     } catch (err) {
         console.error("Resend verification error:", err);
