@@ -752,36 +752,47 @@ app.post('/api/admin/test-email', checkDb, authenticateToken, isAdmin, checkMail
 
 
 app.get('/api/status', async (req, res) => {
-    if (!ai) {
-        return res.json({
-            ai_enabled: false,
-            message: aiInitializationError,
-            message_ar: aiInitializationError || "خدمات الذكاء الاصطناعي معطلة."
-        });
-    }
-    try {
-        await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: 'hello' });
-        res.json({
-            ai_enabled: true,
-            message: 'AI services are operational and the API key is valid.',
-            message_ar: 'خدمات الذكاء الاصطناعي فعّالة ومفتاح الواجهة البرمجية (API Key) صالح.'
-        });
-    } catch (error) {
-        console.error("AI Status Check Error:", error.message);
-        let userMessage = "The API key is likely invalid or has restrictions.";
-        let userMessageAr = "مفتاح الواجهة البرمجية (API Key) غير صالح على الأرجح أو عليه قيود.";
-        if (error.message.includes('API key not valid')) {
-            userMessage = "API key not valid. Please check your key.";
-            userMessageAr = "مفتاح الواجهة البرمجية (API Key) غير صالح. يرجى التحقق من المفتاح الخاص بك.";
-        } else if (error.message.includes('billing')) {
-            userMessage = "API key is valid, but billing is not enabled for the project.";
-            userMessageAr = "مفتاح الواجهة البرمجية صالح، ولكن الفوترة غير مفعلة للمشروع.";
-        } else if (error.message.includes('permission denied')) {
-            userMessage = "The API key does not have permission to use the Gemini API.";
-            userMessageAr = "مفتاح الواجهة البرمجية لا يملك الصلاحية لاستخدام Gemini API.";
+    let ai_enabled = false;
+    let message = aiInitializationError;
+    let message_ar = aiInitializationError || "خدمات الذكاء الاصطناعي معطلة.";
+
+    if (ai) {
+        try {
+            await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: 'hello' });
+            ai_enabled = true;
+            message = 'AI services are operational and the API key is valid.';
+            message_ar = 'خدمات الذكاء الاصطناعي فعّالة ومفتاح الواجهة البرمجية (API Key) صالح.';
+        } catch (error) {
+            console.error("AI Status Check Error:", error.message);
+            let userMessage = "The API key is likely invalid or has restrictions.";
+            let userMessageAr = "مفتاح الواجهة البرمجية (API Key) غير صالح على الأرجح أو عليه قيود.";
+            if (error.message.includes('API key not valid')) {
+                userMessage = "API key not valid. Please check your key.";
+                userMessageAr = "مفتاح الواجهة البرمجية (API Key) غير صالح. يرجى التحقق من المفتاح الخاص بك.";
+            } else if (error.message.includes('billing')) {
+                userMessage = "API key is valid, but billing is not enabled for the project.";
+                userMessageAr = "مفتاح الواجهة البرمجية صالح، ولكن الفوترة غير مفعلة للمشروع.";
+            } else if (error.message.includes('permission denied')) {
+                userMessage = "The API key does not have permission to use the Gemini API.";
+                userMessageAr = "مفتاح الواجهة البرمجية لا يملك الصلاحية لاستخدام Gemini API.";
+            }
+            message = userMessage;
+            message_ar = userMessageAr;
         }
-        res.json({ ai_enabled: false, message: userMessage, message_ar: userMessageAr });
     }
+    
+    const email_enabled = !mailerSendInitializationError;
+    const email_message = email_enabled ? 'Email services are operational.' : mailerSendInitializationError;
+    const email_message_ar = email_enabled ? 'خدمات البريد الإلكتروني فعّالة.' : "متغيرات بيئة MailerSend غير مُعينة. تم تعطيل التحقق عبر البريد الإلكتروني.";
+
+    res.json({
+        ai_enabled: ai_enabled,
+        message: message,
+        message_ar: message_ar,
+        email_enabled: email_enabled,
+        email_message: email_message,
+        email_message_ar: email_message_ar
+    });
 });
 
 // --- Start Server ---
