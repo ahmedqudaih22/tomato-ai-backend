@@ -181,6 +181,19 @@ const initializeDbSchema = async () => {
                 config JSONB NOT NULL
             );
         `);
+        
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS history (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                type VARCHAR(50) NOT NULL,
+                prompt TEXT,
+                result_url TEXT,
+                cost INTEGER NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
         const settingsRes = await client.query('SELECT * FROM settings WHERE id = 1');
         if (settingsRes.rows.length === 0) {
             await client.query('INSERT INTO settings (id, config) VALUES (1, $1)', [JSON.stringify(defaultSettings)]);
@@ -747,6 +760,49 @@ app.post('/api/admin/test-email', checkDb, authenticateToken, isAdmin, checkMail
         res.status(200).json(result);
     } catch (error) {
         res.status(500).json({ message: error.message || 'Failed to send test email.', details: error.details || error.message || 'Unknown error' });
+    }
+});
+
+app.post('/api/history', checkDb, authenticateToken, async (req, res) => {
+    const { type, prompt, resultUrl, cost } = req.body;
+    try {
+        await pool.query(
+            'INSERT INTO history (user_id, type, prompt, result_url, cost) VALUES ($1, $2, $3, $4, $5)',
+            [req.user.id, type, prompt, resultUrl, cost]
+        );
+        res.sendStatus(201);
+    } catch (err) {
+        console.error("Error saving history:", err);
+        res.status(500).json({ message: 'Failed to save history' });
+    }
+});
+
+app.get('/api/history', checkDb, authenticateToken, async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT id, type, prompt, cost, result_url AS "resultUrl", created_at AS date FROM history WHERE user_id = $1 ORDER BY created_at DESC',
+            [req.user.id]
+        );
+        res.json({ history: result.rows });
+    } catch (err) {
+        console.error("Error fetching history:", err);
+        res.status(500).json({ message: 'Failed to fetch history' });
+    }
+});
+
+app.get('/api/stats', checkDb, authenticateToken, isAdmin, async (req, res) => {
+    try {
+        const usersCount = await pool.query('SELECT COUNT(*) FROM users');
+        const operationsCount = await pool.query('SELECT COUNT(*) FROM history');
+
+        res.json({
+            users: parseInt(usersCount.rows[0].count, 10),
+            operations: parseInt(operationsCount.rows[0].count, 10),
+            visitors: 0 // Placeholder for future implementation
+        });
+    } catch (err) {
+        console.error("Error fetching stats:", err);
+        res.status(500).json({ message: 'Failed to fetch statistics' });
     }
 });
 
