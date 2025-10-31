@@ -517,6 +517,14 @@ app.delete('/api/admin/users', authenticateToken, isAdmin, async(req, res) => {
     }
 });
 
+// --- Server Status Route ---
+app.get('/api/status', (req, res) => {
+    res.json({
+        ai_enabled: !!ai,
+        message: ai ? 'AI services are operational.' : aiInitializationError
+    });
+});
+
 
 // --- Start Server ---
 const startServer = async () => {
