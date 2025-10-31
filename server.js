@@ -245,11 +245,14 @@ const maintenanceMiddleware = async (req, res, next) => {
     }
     
     // Allow access to settings for the app to initialize and show maintenance page
-    if (req.path === '/api/settings') {
-        return res.status(503).json({
-            message: "Site is in maintenance mode",
-            settings: settings // Provide settings so frontend can render page
-        });
+    if (req.path === '/api/settings' || req.path === '/api/config') {
+         if (req.path === '/api/settings') {
+            return res.status(503).json({
+                message: "Site is in maintenance mode",
+                settings: settings // Provide settings so frontend can render page
+            });
+         }
+         return next();
     }
 
     return res.status(503).json({ 
