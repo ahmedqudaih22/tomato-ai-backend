@@ -10,6 +10,28 @@ const app = express();
 const port = process.env.PORT || 3001;
 
 // --- Middleware ---
+
+// CORS Configuration - IMPORTANT: This must be one of the first middleware.
+const allowedOrigins = [
+  'https://tomato-ai-15430077659.us-west1.run.app', // Production Frontend
+  'http://localhost:8080' // For local development, if you use one
+];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, curl, or same-origin requests)
+    // or from our allowed list.
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS blocked for origin: ${origin}`); // Log blocked origins for debugging
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+};
+app.use(cors(corsOptions));
+
+
 // The Stripe webhook endpoint needs the raw body, so we apply express.json() conditionally.
 app.use((req, res, next) => {
   if (req.originalUrl === '/stripe-webhook') {
@@ -18,7 +40,6 @@ app.use((req, res, next) => {
     express.json({ limit: '10mb' })(req, res, next); // Increase limit for data URLs
   }
 });
-app.use(cors());
 
 
 // --- Database Connection ---
