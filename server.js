@@ -85,11 +85,19 @@ const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
 // --- Gemini AI Setup ---
 let ai;
+let aiInitializationError = null;
 if (process.env.API_KEY) {
-    ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    console.log("GoogleGenAI initialized successfully.");
+    try {
+        ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        console.log("GoogleGenAI initialized successfully.");
+    } catch(e) {
+        ai = null;
+        aiInitializationError = "Failed to initialize GoogleGenAI. Check if the API_KEY is valid.";
+        console.error(aiInitializationError, e);
+    }
 } else {
-    console.warn("API_KEY environment variable not set. AI features will be disabled.");
+    aiInitializationError = "API_KEY environment variable not set on the server. AI features are disabled.";
+    console.warn(aiInitializationError);
 }
 
 // --- Auth Middleware ---
@@ -237,7 +245,8 @@ app.post('/api/users/deduct-points', authenticateToken, async (req, res) => {
 // --- AI Generation Proxy ---
 app.post('/api/ai/generate', authenticateToken, async (req, res) => {
     if (!ai) {
-        return res.status(503).json({ message: 'AI services are not available on the server.' });
+        const message = aiInitializationError || 'AI services are not available on the server.';
+        return res.status(503).json({ message });
     }
     const { cost, payload } = req.body;
     const userId = req.user.id;
@@ -295,7 +304,8 @@ app.post('/api/ai/generate', authenticateToken, async (req, res) => {
 
 app.post('/api/ai/remove-background', authenticateToken, isAdmin, async (req, res) => {
     if (!ai) {
-        return res.status(503).json({ message: 'AI services are not available on the server.' });
+        const message = aiInitializationError || 'AI services are not available on the server.';
+        return res.status(503).json({ message });
     }
     try {
         const { imagePart, textPart } = req.body;
