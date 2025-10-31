@@ -75,15 +75,6 @@ if (!MAILERSEND_API_TOKEN || !MAILERSEND_SENDER_EMAIL) {
     console.warn(mailerSendInitializationError);
 }
 
-const RECAPTCHA_SITE_KEY = process.env.RECAPTCHA_SITE_KEY;
-const RECAPTCHA_SECRET_KEY = process.env.RECAPTCHA_SECRET_KEY;
-let recaptchaInitializationError = null;
-if (!RECAPTCHA_SITE_KEY || !RECAPTCHA_SECRET_KEY) {
-    recaptchaInitializationError = "reCAPTCHA environment variables (RECAPTCHA_SITE_KEY, RECAPTCHA_SECRET_KEY) are not set. Registration is not protected against bots.";
-    console.warn(recaptchaInitializationError);
-}
-
-
 // --- Middleware ---
 
 app.use(cors());
@@ -136,9 +127,6 @@ const defaultSettings = {
         enabled: false,
         message_ar: "🚧 الموقع قيد الصيانة حاليًا 🚧\n\nنحن نعمل بجد لتحسين تجربتك. سنعود قريبًا!",
         message_en: "🚧 Site is Currently Under Maintenance 🚧\n\nWe're working hard to improve your experience. We will be back soon!"
-    },
-    recaptcha: {
-        enabled: false
     }
 };
 
@@ -409,13 +397,11 @@ const isAdmin = (req, res, next) => {
 // --- API Routes ---
 
 app.get('/api/config', (req, res) => {
-    res.json({
-        recaptchaSiteKey: RECAPTCHA_SITE_KEY,
-    });
+    res.json({});
 });
 
 app.post('/api/register', checkDb, async (req, res) => {
-    const { username, email, password, country, recaptchaToken, referralCode } = req.body;
+    const { username, email, password, country, referralCode } = req.body;
     if (!username || !email || !password) return res.status(400).json({ message: 'Username, email and password are required.' });
     if (username.length < 3) return res.status(400).json({ message: 'Username must be at least 3 characters.'});
 
@@ -427,25 +413,6 @@ app.post('/api/register', checkDb, async (req, res) => {
         const isFirstUser = parseInt(userCountResult.rows[0].count) === 0;
         
         const currentSettings = await getSettings();
-
-        // Enforce reCAPTCHA if it's enabled in settings, the keys exist, and it's not the first user.
-        if (currentSettings.recaptcha?.enabled && !isFirstUser && !recaptchaInitializationError) {
-            if (!recaptchaToken) {
-                return res.status(400).json({ message: 'Please complete the reCAPTCHA.' });
-            }
-            try {
-                const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`;
-                const recaptchaRes = await fetch(verificationUrl, { method: 'POST' });
-                const recaptchaData = await recaptchaRes.json();
-                if (!recaptchaData.success) {
-                    console.error("reCAPTCHA verification failed:", recaptchaData['error-codes']);
-                    return res.status(400).json({ message: 'reCAPTCHA verification failed. Please try again.' });
-                }
-            } catch (e) {
-                console.error("reCAPTCHA request error:", e);
-                return res.status(500).json({ message: 'Could not verify reCAPTCHA. Please contact support.' });
-            }
-        }
 
         const existingUser = await client.query('SELECT email, username FROM users WHERE LOWER(email) = LOWER($1) OR LOWER(username) = LOWER($2)', [email, username]);
         if (existingUser.rows.length > 0) {
@@ -886,17 +853,6 @@ app.get('/api/status', async (req, res) => {
         }
     }
     
-    const settings = await getSettings();
-    const recaptcha_enabled_from_settings = settings.recaptcha?.enabled === true;
-    const recaptcha_enabled = !recaptchaInitializationError && recaptcha_enabled_from_settings;
-    
-    let recaptcha_message = recaptchaInitializationError;
-    let recaptcha_message_ar = "متغيرات بيئة reCAPTCHA غير مُعينة. التسجيل غير محمي ضد البوتات.";
-    if (!recaptchaInitializationError) {
-        recaptcha_message = recaptcha_enabled ? 'reCAPTCHA is configured and active.' : 'reCAPTCHA is disabled in the admin dashboard.';
-        recaptcha_message_ar = recaptcha_enabled ? 'نظام reCAPTCHA مُعد وجاهز للعمل لحماية التسجيل.' : 'تم تعطيل reCAPTCHA من لوحة التحكم.';
-    }
-
     res.json({
         ai_enabled: ai_enabled,
         message: message,
@@ -904,9 +860,6 @@ app.get('/api/status', async (req, res) => {
         email_enabled: !mailerSendInitializationError,
         email_message: !mailerSendInitializationError ? 'Email services are operational.' : mailerSendInitializationError,
         email_message_ar: !mailerSendInitializationError ? 'خدمات البريد الإلكتروني فعّالة.' : "متغيرات بيئة MailerSend غير مُعينة. إرسال البريد الإلكتروني معطل.",
-        recaptcha_enabled,
-        recaptcha_message,
-        recaptcha_message_ar
     });
 });
 
