@@ -96,27 +96,6 @@ app.use((req, res, next) => {
   }
 });
 
-// --- Service Availability Middleware ---
-const checkDb = (req, res, next) => {
-    if (!pool) return res.status(503).json({ message: dbInitializationError || 'خدمة قاعدة البيانات غير متوفرة.' });
-    next();
-};
-const checkStripe = (req, res, next) => {
-    if (!stripe) return res.status(503).json({ message: stripeInitializationError || 'خدمة الدفع غير متوفرة.' });
-    next();
-};
-const checkAi = (req, res, next) => {
-    if (!ai) return res.status(503).json({ message: aiInitializationError || 'خدمة الذكاء الاصطناعي غير متوفرة.' });
-    next();
-};
-const checkMailerSend = (req, res, next) => {
-    if (mailerSendInitializationError) {
-        return res.status(503).json({ message: mailerSendInitializationError });
-    }
-    next();
-};
-
-
 const defaultSettings = {
     costs: { imageEdit: 2, imageCreate: 5, textToSpeech: 1, dailyRewardPoints: 10, referralBonus: 50 },
     theme: { 
@@ -152,6 +131,11 @@ const defaultSettings = {
         enabled: false, imageUrl: "", contentAr: "<h1>عرض خاص!</h1><p>احصل على ضعف النقاط عند الشراء هذا الأسبوع.</p>", 
         contentEn: "<h1>Special Offer!</h1><p>Get double the points on all purchases this week.</p>",
         textColor: "#000000", fontSize: 16
+    },
+    maintenance: {
+        enabled: false,
+        message_ar: "🚧 الموقع قيد الصيانة حاليًا 🚧\n\nنحن نعمل بجد لتحسين تجربتك. سنعود قريبًا!",
+        message_en: "🚧 Site is Currently Under Maintenance 🚧\n\nWe're working hard to improve your experience. We will be back soon!"
     }
 };
 
@@ -213,6 +197,89 @@ const initializeDbSchema = async () => {
     } finally {
         client.release();
     }
+};
+
+let settingsCache = null;
+const getSettings = async () => {
+    if (settingsCache) return settingsCache;
+    if (!pool) return defaultSettings;
+    try {
+        const result = await pool.query('SELECT config FROM settings WHERE id = 1');
+        if (result.rows.length > 0) {
+            settingsCache = result.rows[0].config;
+            return settingsCache;
+        }
+        return defaultSettings;
+    } catch (err) {
+        console.error("Error fetching settings, returning default:", err);
+        return defaultSettings;
+    }
+}
+const invalidateSettingsCache = () => { settingsCache = null; };
+
+
+const maintenanceMiddleware = async (req, res, next) => {
+    if (!pool) return next(); // If DB is down, can't check settings, so let it pass to avoid blocking everything
+
+    const settings = await getSettings();
+    if (!settings.maintenance?.enabled) {
+        return next();
+    }
+
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (token) {
+        try {
+            const userRes = await pool.query(
+                `SELECT is_admin FROM users WHERE session_token = $1 AND token_expires_at > NOW()`,
+                [token]
+            );
+            if (userRes.rows.length > 0 && userRes.rows[0].is_admin) {
+                return next(); // Admin is allowed
+            }
+        } catch (dbError) {
+            console.error("Maintenance middleware DB error:", dbError);
+            // Fall through to block
+        }
+    }
+    
+    // Allow access to settings for the app to initialize and show maintenance page
+    if (req.path === '/api/settings') {
+        return res.status(503).json({
+            message: "Site is in maintenance mode",
+            settings: settings // Provide settings so frontend can render page
+        });
+    }
+
+    return res.status(503).json({ 
+        message: "Site is in maintenance mode",
+        maintenance_message_en: settings.maintenance.message_en,
+        maintenance_message_ar: settings.maintenance.message_ar
+    });
+};
+
+app.use(maintenanceMiddleware);
+
+
+// --- Service Availability Middleware ---
+const checkDb = (req, res, next) => {
+    if (!pool) return res.status(503).json({ message: dbInitializationError || 'خدمة قاعدة البيانات غير متوفرة.' });
+    next();
+};
+const checkStripe = (req, res, next) => {
+    if (!stripe) return res.status(503).json({ message: stripeInitializationError || 'خدمة الدفع غير متوفرة.' });
+    next();
+};
+const checkAi = (req, res, next) => {
+    if (!ai) return res.status(503).json({ message: aiInitializationError || 'خدمة الذكاء الاصطناعي غير متوفرة.' });
+    next();
+};
+const checkMailerSend = (req, res, next) => {
+    if (mailerSendInitializationError) {
+        return res.status(503).json({ message: mailerSendInitializationError });
+    }
+    next();
 };
 
 // --- Unified Email Sending Utility ---
@@ -358,6 +425,7 @@ app.post('/api/register', checkDb, async (req, res) => {
         const isFirstUser = parseInt(userCountResult.rows[0].count) === 0;
 
         let referredById = null;
+        const currentSettings = await getSettings();
         if (referralCode) {
             const referrerRes = await client.query('SELECT id FROM users WHERE referral_code = $1', [referralCode]);
             if (referrerRes.rows.length > 0) {
@@ -365,7 +433,7 @@ app.post('/api/register', checkDb, async (req, res) => {
             }
         }
 
-        const newUserPoints = referredById ? 10 + defaultSettings.costs.referralBonus : 10;
+        const newUserPoints = referredById ? 10 + currentSettings.costs.referralBonus : 10;
         
         const { rows } = await client.query(
             `INSERT INTO users (email, password, country, is_admin, status, referred_by, points, referral_code) 
@@ -375,7 +443,7 @@ app.post('/api/register', checkDb, async (req, res) => {
         const newUser = rows[0];
 
         if (referredById) {
-            await client.query('UPDATE users SET points = points + $1 WHERE id = $2', [defaultSettings.costs.referralBonus, referredById]);
+            await client.query('UPDATE users SET points = points + $1 WHERE id = $2', [currentSettings.costs.referralBonus, referredById]);
         }
 
         const token = await generateAndSetToken(newUser.id, client);
@@ -552,8 +620,8 @@ app.post('/api/claim-daily-reward', checkDb, authenticateToken, async (req, res)
     }
     
     try {
-        const settingsRes = await pool.query('SELECT config FROM settings WHERE id = 1');
-        const pointsToAdd = settingsRes.rows[0].config.costs.dailyRewardPoints || 10;
+        const settings = await getSettings();
+        const pointsToAdd = settings.costs.dailyRewardPoints || 10;
 
         const result = await pool.query(
             'UPDATE users SET points = points + $1, last_daily_claim = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, email, country, points, is_admin, status, last_daily_claim',
@@ -570,13 +638,8 @@ app.post('/api/claim-daily-reward', checkDb, authenticateToken, async (req, res)
 
 app.get('/api/settings', checkDb, async (req, res) => {
     try {
-        const result = await pool.query('SELECT config FROM settings WHERE id = 1');
-        if (result.rows.length > 0) {
-            res.json(result.rows[0].config);
-        } else {
-            console.warn("Settings not found, returning default. DB might be initializing.");
-            res.json(defaultSettings);
-        }
+        const settings = await getSettings();
+        res.json(settings);
     } catch (err) {
         console.error("Get settings error:", err);
         res.status(500).json({ message: 'Failed to fetch settings' });
@@ -587,6 +650,7 @@ app.put('/api/admin/settings', checkDb, authenticateToken, isAdmin, async (req, 
     const newSettings = req.body;
     try {
         await pool.query('UPDATE settings SET config = $1 WHERE id = 1', [newSettings]);
+        invalidateSettingsCache();
         res.status(200).json({ message: 'Settings updated successfully' });
     } catch (err) {
         console.error("Update settings error:", err);
@@ -598,8 +662,8 @@ app.post('/api/create-checkout-session', checkDb, checkStripe, authenticateToken
     const { packageId } = req.body;
     const user = req.user;
     try {
-        const settingsRes = await pool.query('SELECT config FROM settings WHERE id = 1');
-        const pkg = settingsRes.rows[0].config.store.packages.find(p => p.id === packageId);
+        const settings = await getSettings();
+        const pkg = settings.store.packages.find(p => p.id === packageId);
         if (!pkg) return res.status(404).json({ message: 'Package not found.' });
 
         const session = await stripe.checkout.sessions.create({
@@ -800,4 +864,5 @@ app.get('/api/status', async (req, res) => {
 app.listen(port, async () => {
     console.log(`Server listening on port ${port}`);
     await initializeDbSchema();
+    await getSettings(); // Prime the cache on start
 });
