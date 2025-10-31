@@ -220,23 +220,29 @@ const sendVerificationEmail = async (email, code) => {
             },
             body: JSON.stringify(emailPayload)
         });
-        if (!response.ok) {
-            let errorDetails = `Status: ${response.status} ${response.statusText}`;
-            try {
-                const errorBody = await response.json();
-                console.error('MailerSend API Error:', errorBody);
-                if (errorBody.message) {
-                    errorDetails = errorBody.message;
-                }
-            } catch (e) {
-                console.error('Could not parse MailerSend error response as JSON.');
-            }
-            throw new Error(`Failed to send verification email. ${errorDetails}`);
+
+        if (response.ok) {
+            console.log(`Verification email sent successfully to ${email}.`);
+            return;
         }
-        console.log(`Verification email sent to ${email}`);
+        
+        // If not OK, handle the error
+        let errorDetails = `Status: ${response.status} ${response.statusText}`;
+        try {
+            const errorBody = await response.json();
+            console.error('MailerSend API Error on Registration:', errorBody);
+            errorDetails = errorBody.message || errorDetails;
+            if (errorBody.errors) {
+                 errorDetails += ` Details: ${JSON.stringify(errorBody.errors)}`;
+            }
+        } catch (e) {
+            console.error('Could not parse MailerSend error response as JSON during registration.');
+        }
+        throw new Error(`Failed to send verification email. Details: ${errorDetails}`);
+
     } catch (error) {
-        console.error('Error sending verification email:', error.message);
-        throw error;
+        console.error('Error in sendVerificationEmail function:', error.message);
+        throw error; // Re-throw the error to be caught by the route handler.
     }
 };
 
