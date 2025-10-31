@@ -4,6 +4,7 @@ const { Pool } = require('pg');
 const cors = require('cors');
 const Stripe = require('stripe');
 const { GoogleGenAI } = require('@google/genai');
+const crypto = require('crypto');
 require('dotenv').config();
 
 const app = express();
@@ -70,9 +71,18 @@ const MAILERSEND_API_TOKEN = process.env.MAILERSEND_API_TOKEN;
 const MAILERSEND_SENDER_EMAIL = process.env.MAILERSEND_SENDER_EMAIL;
 let mailerSendInitializationError = null;
 if (!MAILERSEND_API_TOKEN || !MAILERSEND_SENDER_EMAIL) {
-    mailerSendInitializationError = "MailerSend environment variables (MAILERSEND_API_TOKEN, MAILERSEND_SENDER_EMAIL) are not set. Email verification is disabled.";
+    mailerSendInitializationError = "MailerSend environment variables (MAILERSEND_API_TOKEN, MAILERSEND_SENDER_EMAIL) are not set. Email sending is disabled.";
     console.warn(mailerSendInitializationError);
 }
+
+const RECAPTCHA_SITE_KEY = process.env.RECAPTCHA_SITE_KEY;
+const RECAPTCHA_SECRET_KEY = process.env.RECAPTCHA_SECRET_KEY;
+let recaptchaInitializationError = null;
+if (!RECAPTCHA_SITE_KEY || !RECAPTCHA_SECRET_KEY) {
+    recaptchaInitializationError = "reCAPTCHA environment variables (RECAPTCHA_SITE_KEY, RECAPTCHA_SECRET_KEY) are not set. Registration is not protected against bots.";
+    console.warn(recaptchaInitializationError);
+}
+
 
 // --- Middleware ---
 
@@ -108,8 +118,7 @@ const checkMailerSend = (req, res, next) => {
 
 
 const defaultSettings = {
-    costs: { imageEdit: 2, imageCreate: 5, textToSpeech: 1, dailyRewardPoints: 10 },
-    referralBonus: 50,
+    costs: { imageEdit: 2, imageCreate: 5, textToSpeech: 1, dailyRewardPoints: 10, referralBonus: 50 },
     theme: { 
         logoUrl: "https://i.ibb.co/mH2WvTz/tomato-logo.png", 
         logoWidth: 150, 
@@ -161,19 +170,17 @@ const initializeDbSchema = async () => {
                 country VARCHAR(10),
                 points INTEGER DEFAULT 10,
                 is_admin BOOLEAN DEFAULT FALSE,
-                status VARCHAR(20) DEFAULT 'pending',
+                status VARCHAR(20) DEFAULT 'active',
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 last_daily_claim TIMESTAMP WITH TIME ZONE,
                 verification_code TEXT,
-                verification_expires TIMESTAMP WITH TIME ZONE
+                verification_expires TIMESTAMP WITH TIME ZONE,
+                session_token TEXT UNIQUE,
+                token_expires_at TIMESTAMP WITH TIME ZONE,
+                referral_code TEXT UNIQUE,
+                referred_by INTEGER REFERENCES users(id)
             );
         `);
-        
-        const verificationCodeCol = await client.query("SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='verification_code'");
-        if (verificationCodeCol.rows.length === 0) {
-            await client.query("ALTER TABLE users ADD COLUMN verification_code TEXT, ADD COLUMN verification_expires TIMESTAMP WITH TIME ZONE, ALTER COLUMN status SET DEFAULT 'pending'");
-            console.log("Added verification columns and updated status default in users table.");
-        }
 
         await client.query(`
             CREATE TABLE IF NOT EXISTS settings (
@@ -210,6 +217,9 @@ const initializeDbSchema = async () => {
 
 // --- Unified Email Sending Utility ---
 const sendEmail = async (to, subject, html, fromName = "Tomato AI") => {
+    if (mailerSendInitializationError) {
+        throw new Error("Cannot send email because MailerSend is not configured.");
+    }
     const emailPayload = {
         from: { email: MAILERSEND_SENDER_EMAIL, name: fromName },
         to: [{ email: to }],
@@ -257,21 +267,15 @@ const sendEmail = async (to, subject, html, fromName = "Tomato AI") => {
     }
 };
 
-
-const sendVerificationEmail = async (email, code) => {
-    const subject = `Your Verification Code for Tomato AI`;
-    const html = `
-        <div style="font-family: Arial, sans-serif; text-align: center; color: #333;">
-            <h2>Welcome to Tomato AI!</h2>
-            <p>Your verification code is:</p>
-            <p style="font-size: 24px; font-weight: bold; letter-spacing: 5px; background: #f0f0f0; padding: 10px 20px; border-radius: 5px; display: inline-block;">${code}</p>
-            <p>This code will expire in 15 minutes.</p>
-            <p style="font-size: 12px; color: #888;">If you did not request this, please ignore this email.</p>
-        </div>
-    `;
-    return sendEmail(email, subject, html);
+const generateAndSetToken = async (userId, client) => {
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days expiry
+    await client.query(
+        'UPDATE users SET session_token = $1, token_expires_at = $2 WHERE id = $3',
+        [token, expiresAt, userId]
+    );
+    return token;
 };
-
 
 const authenticateToken = async (req, res, next) => {
     if (!pool) return res.status(503).json({ message: dbInitializationError });
@@ -281,11 +285,15 @@ const authenticateToken = async (req, res, next) => {
     
     let client;
     try {
-        const userId = parseInt(token);
-        if (isNaN(userId)) return res.sendStatus(401);
-
         client = await pool.connect();
-        const result = await client.query('SELECT id, email, country, points, is_admin, status, last_daily_claim FROM users WHERE id = $1', [userId]);
+        const result = await client.query(
+            `SELECT 
+                u.id, u.email, u.country, u.points, u.is_admin, u.status, u.last_daily_claim, u.referral_code,
+                (SELECT COUNT(*) FROM users WHERE referred_by = u.id) as referrals
+             FROM users u
+             WHERE u.session_token = $1 AND u.token_expires_at > NOW()`,
+            [token]
+        );
         
         if (result.rows.length === 0) return res.sendStatus(403);
         
@@ -308,188 +316,122 @@ const isAdmin = (req, res, next) => {
 
 // --- API Routes ---
 
+app.get('/api/config', (req, res) => {
+    res.json({
+        recaptchaSiteKey: RECAPTCHA_SITE_KEY,
+    });
+});
+
 app.post('/api/register', checkDb, async (req, res) => {
-    const { email, password, country } = req.body;
+    const { email, password, country, recaptchaToken, referralCode } = req.body;
     if (!email || !password) return res.status(400).json({ message: 'Email and password are required.' });
 
-    try {
-        // --- Handle existing user ---
-        const existingUser = await pool.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
-        if (existingUser.rows.length > 0) {
-            const user = existingUser.rows[0];
-            if (user.status !== 'pending') {
-                return res.status(409).json({ message: 'Email already exists.' });
+    if (!recaptchaInitializationError) {
+        if (!recaptchaToken) {
+            return res.status(400).json({ message: 'Please complete the reCAPTCHA.' });
+        }
+        try {
+            const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`;
+            const recaptchaRes = await fetch(verificationUrl, { method: 'POST' });
+            const recaptchaData = await recaptchaRes.json();
+            if (!recaptchaData.success) {
+                console.error("reCAPTCHA verification failed:", recaptchaData['error-codes']);
+                return res.status(400).json({ message: 'reCAPTCHA verification failed. Please try again.' });
             }
+        } catch (e) {
+            console.error("reCAPTCHA request error:", e);
+            return res.status(500).json({ message: 'Could not verify reCAPTCHA. Please contact support.' });
+        }
+    }
 
-            // User exists and is pending. Decide whether to send email or auto-verify.
-            if (mailerSendInitializationError) {
-                console.warn(`Email service not configured. Auto-verifying existing pending user: ${email}`);
-                const { rows } = await pool.query("UPDATE users SET status = 'active', verification_code = NULL, verification_expires = NULL WHERE id = $1 RETURNING *", [user.id]);
-                const verifiedUser = rows[0];
-                const token = verifiedUser.id.toString();
-                delete verifiedUser.password; delete verifiedUser.verification_code; delete verifiedUser.verification_expires;
-                return res.status(200).json({ message: 'Account verified successfully due to an email system issue.', user: verifiedUser, token });
-            }
-            
-            // Email service seems configured, try to send a new code
-            try {
-                const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-                const verificationExpires = new Date(Date.now() + 15 * 60 * 1000);
-                await sendVerificationEmail(email, verificationCode);
-                await pool.query('UPDATE users SET verification_code = $1, verification_expires = $2 WHERE id = $3', [verificationCode, verificationExpires, user.id]);
-                return res.status(200).json({ message: 'Account already exists. A new verification code has been sent.', email });
-            } catch (e) {
-                // Fallback if configured mailer fails
-                console.warn(`Could not resend verification for ${email} due to mailer error. Auto-verifying.`);
-                const { rows } = await pool.query("UPDATE users SET status = 'active', verification_code = NULL, verification_expires = NULL WHERE id = $1 RETURNING *", [user.id]);
-                const verifiedUser = rows[0];
-                const token = verifiedUser.id.toString();
-                delete verifiedUser.password; delete verifiedUser.verification_code; delete verifiedUser.verification_expires;
-                return res.status(200).json({ message: 'Account verified successfully due to an email system issue.', user: verifiedUser, token });
-            }
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const existingUser = await client.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
+        if (existingUser.rows.length > 0) {
+            await client.query('ROLLBACK');
+            return res.status(409).json({ message: 'Email already exists.' });
         }
         
-        // --- Handle new user ---
-        const userCountResult = await pool.query('SELECT COUNT(*) FROM users');
+        const userCountResult = await client.query('SELECT COUNT(*) FROM users');
         const isFirstUser = parseInt(userCountResult.rows[0].count) === 0;
 
-        const shouldAutoVerify = !!mailerSendInitializationError || isFirstUser;
-        const status = shouldAutoVerify ? 'active' : 'pending';
-        
-        const verificationCode = status === 'pending' ? Math.floor(100000 + Math.random() * 900000).toString() : null;
-        const verificationExpires = status === 'pending' ? new Date(Date.now() + 15 * 60 * 1000) : null;
+        let referredById = null;
+        if (referralCode) {
+            const referrerRes = await client.query('SELECT id FROM users WHERE referral_code = $1', [referralCode]);
+            if (referrerRes.rows.length > 0) {
+                referredById = referrerRes.rows[0].id;
+            }
+        }
 
-        const { rows } = await pool.query(
-            'INSERT INTO users (email, password, country, is_admin, status, verification_code, verification_expires) VALUES (LOWER($1), $2, $3, $4, $5, $6, $7) RETURNING *',
-            [email, password, country, isFirstUser, status, verificationCode, verificationExpires]
+        const newUserPoints = referredById ? 10 + defaultSettings.costs.referralBonus : 10;
+        
+        const { rows } = await client.query(
+            `INSERT INTO users (email, password, country, is_admin, status, referred_by, points, referral_code) 
+             VALUES (LOWER($1), $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+            [email, password, country, isFirstUser, 'active', referredById, newUserPoints, `${email.split('@')[0]}${crypto.randomBytes(3).toString('hex')}`]
         );
         const newUser = rows[0];
 
-        if (status === 'pending') {
-            try {
-                await sendVerificationEmail(email, verificationCode);
-                return res.status(201).json({ message: 'Registration successful! Please check your email to verify your account.', email });
-            } catch (err) {
-                 console.error(`Verification email for ${email} failed despite configuration: ${err.message}. Auto-verifying account.`);
-                 const updateResult = await pool.query("UPDATE users SET status = 'active', verification_code = NULL, verification_expires = NULL WHERE id = $1 RETURNING *", [newUser.id]);
-                 const verifiedUser = updateResult.rows[0];
-                 const token = verifiedUser.id.toString();
-                 delete verifiedUser.password; delete verifiedUser.verification_code; delete verifiedUser.verification_expires;
-                 return res.status(201).json({ message: 'Registration successful! Your account has been automatically verified due to an email system issue.', user: verifiedUser, token: token });
-            }
-        } else { // status === 'active'
-            const token = newUser.id.toString();
-            delete newUser.password; delete newUser.verification_code; delete newUser.verification_expires;
-            const message = isFirstUser 
-                ? 'Registration successful! You are now logged in.' 
-                : 'Registration successful! Your account has been automatically verified due to an email system issue.';
-            return res.status(201).json({ message, user: newUser, token });
+        if (referredById) {
+            await client.query('UPDATE users SET points = points + $1 WHERE id = $2', [defaultSettings.costs.referralBonus, referredById]);
         }
+
+        const token = await generateAndSetToken(newUser.id, client);
+        
+        await client.query('COMMIT');
+        
+        delete newUser.password;
+        delete newUser.session_token;
+        delete newUser.token_expires_at;
+        
+        return res.status(201).json({ 
+            message: 'Registration successful! You are now logged in.', 
+            user: newUser, 
+            token 
+        });
+
     } catch (err) {
+        await client.query('ROLLBACK');
         console.error("Registration Error:", err);
         res.status(500).json({ message: 'Internal server error' });
+    } finally {
+        client.release();
     }
 });
 
 
 app.post('/api/login', checkDb, async (req, res) => {
     const { email, password } = req.body;
+    const client = await pool.connect();
     try {
-        const result = await pool.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
+        const result = await client.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
         if (result.rows.length === 0) return res.status(401).json({ message: 'Invalid credentials' });
         
         const user = result.rows[0];
         if (user.password !== password) return res.status(401).json({ message: 'Invalid credentials' });
         
         if (user.status === 'pending') {
-            return res.status(401).json({ message: 'Your account is not verified. Please check your email for the verification code.', code: 'ACCOUNT_NOT_VERIFIED' });
+            return res.status(401).json({ message: 'Your account is not verified. Please contact support.', code: 'ACCOUNT_NOT_VERIFIED' });
         }
         if (user.status === 'banned') return res.status(403).json({ message: 'This account is banned.' });
         
-        const token = user.id.toString();
+        const token = await generateAndSetToken(user.id, client);
+        
         delete user.password;
-        delete user.verification_code;
-        delete user.verification_expires;
+        delete user.session_token;
+        delete user.token_expires_at;
+        
         res.status(200).json({ message: 'Login successful', user, token });
     } catch (err) {
         console.error("Login error:", err);
         res.status(500).json({ message: 'Internal server error' });
+    } finally {
+        client.release();
     }
 });
 
-app.post('/api/verify-email', checkDb, async (req, res) => {
-    const { email, code } = req.body;
-    try {
-        const result = await pool.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND status = $2', [email, 'pending']);
-        if (result.rows.length === 0) return res.status(400).json({ message: 'Invalid request or account already verified.' });
-
-        const user = result.rows[0];
-        const now = new Date();
-
-        if (user.verification_code !== code || user.verification_expires < now) {
-            return res.status(400).json({ message: 'Invalid or expired verification code.' });
-        }
-        
-        const updateResult = await pool.query(
-            "UPDATE users SET status = 'active', verification_code = NULL, verification_expires = NULL WHERE id = $1 RETURNING *",
-            [user.id]
-        );
-        
-        const verifiedUser = updateResult.rows[0];
-        const token = verifiedUser.id.toString();
-        delete verifiedUser.password;
-        delete verifiedUser.verification_code;
-        delete verifiedUser.verification_expires;
-
-        res.status(200).json({ message: 'Account verified successfully.', user: verifiedUser, token });
-
-    } catch (err) {
-        console.error("Verification error:", err);
-        res.status(500).json({ message: 'Internal server error.' });
-    }
-});
-
-app.post('/api/resend-verification', checkDb, async (req, res) => {
-    const { email } = req.body;
-    try {
-        const result = await pool.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND status = $2', [email, 'pending']);
-        if (result.rows.length === 0) {
-            return res.status(404).json({ message: 'No pending account found for this email.' });
-        }
-        
-        const user = result.rows[0];
-        
-        // Explicit check for mailer configuration
-        if (mailerSendInitializationError) {
-            console.warn(`Email service not configured. Auto-verifying user on resend request: ${email}`);
-            const { rows } = await pool.query("UPDATE users SET status = 'active', verification_code = NULL, verification_expires = NULL WHERE id = $1 RETURNING *", [user.id]);
-            const verifiedUser = rows[0];
-            const token = verifiedUser.id.toString();
-            delete verifiedUser.password; delete verifiedUser.verification_code; delete verifiedUser.verification_expires;
-            return res.status(200).json({ message: 'Account verified successfully due to an email system issue.', user: verifiedUser, token });
-        }
-
-        // Email service seems configured, try sending
-        try {
-            const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-            const verificationExpires = new Date(Date.now() + 15 * 60 * 1000);
-            await sendVerificationEmail(email, verificationCode);
-            await pool.query('UPDATE users SET verification_code = $1, verification_expires = $2 WHERE id = $3', [verificationCode, verificationExpires, user.id]);
-            return res.status(200).json({ message: 'A new verification code has been sent.' });
-        } catch (err) {
-            // Fallback for configured mailer failure
-            console.warn(`Could not resend verification for ${email} due to mailer error. Auto-verifying.`);
-            const { rows } = await pool.query("UPDATE users SET status = 'active', verification_code = NULL, verification_expires = NULL WHERE id = $1 RETURNING *", [user.id]);
-            const verifiedUser = rows[0];
-            const token = verifiedUser.id.toString();
-            delete verifiedUser.password; delete verifiedUser.verification_code; delete verifiedUser.verification_expires;
-            return res.status(200).json({ message: 'Account verified successfully due to an email system issue.', user: verifiedUser, token });
-        }
-    } catch (err) {
-        console.error("Resend verification error:", err);
-        res.status(500).json({ message: 'Internal server error.' });
-    }
-});
 
 app.get('/api/users/me', checkDb, authenticateToken, async (req, res) => {
     const user = req.user;
@@ -837,17 +779,20 @@ app.get('/api/status', async (req, res) => {
         }
     }
     
-    const email_enabled = !mailerSendInitializationError;
-    const email_message = email_enabled ? 'Email services are operational.' : mailerSendInitializationError;
-    const email_message_ar = email_enabled ? 'خدمات البريد الإلكتروني فعّالة.' : "متغيرات بيئة MailerSend غير مُعينة. تم تعطيل التحقق عبر البريد الإلكتروني.";
+    const recaptcha_enabled = !recaptchaInitializationError;
+    const recaptcha_message = recaptcha_enabled ? 'reCAPTCHA is configured and active for registration.' : recaptchaInitializationError;
+    const recaptcha_message_ar = recaptcha_enabled ? 'نظام reCAPTCHA مُعد وجاهز للعمل لحماية التسجيل.' : "متغيرات بيئة reCAPTCHA غير مُعينة. التسجيل غير محمي ضد البوتات.";
 
     res.json({
         ai_enabled: ai_enabled,
         message: message,
         message_ar: message_ar,
-        email_enabled: email_enabled,
-        email_message: email_message,
-        email_message_ar: email_message_ar
+        email_enabled: !mailerSendInitializationError,
+        email_message: !mailerSendInitializationError ? 'Email services are operational.' : mailerSendInitializationError,
+        email_message_ar: !mailerSendInitializationError ? 'خدمات البريد الإلكتروني فعّالة.' : "متغيرات بيئة MailerSend غير مُعينة. إرسال البريد الإلكتروني معطل.",
+        recaptcha_enabled,
+        recaptcha_message,
+        recaptcha_message_ar
     });
 });
 
