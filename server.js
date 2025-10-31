@@ -354,7 +354,7 @@ app.post('/api/ai/remove-background', authenticateToken, isAdmin, async (req, re
         const { imagePart, textPart } = req.body;
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash-image',
-            contents: { parts: [imagePart, textPart] },
+            contents: [{ parts: [imagePart, textPart] }],
             config: { responseModalities: ['IMAGE'] },
         });
 
