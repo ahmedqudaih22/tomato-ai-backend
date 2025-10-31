@@ -297,6 +297,9 @@ app.post('/api/register', checkDb, checkMailerSend, async (req, res) => {
         res.status(201).json({ message: 'Registration successful! Please check your email to verify your account.', email });
     } catch (err) {
         console.error("Registration Error:", err);
+        if (err.message.includes('Failed to send verification email')) {
+            return res.status(500).json({ message: 'Server configuration error: Could not send verification email. Please contact support.' });
+        }
         res.status(500).json({ message: 'Internal server error' });
     }
 });
@@ -638,6 +641,50 @@ app.put('/api/admin/users/:id', checkDb, authenticateToken, isAdmin, async (req,
         res.status(500).json({ message: 'Failed to update user' });
      }
 });
+
+// New Admin endpoint for testing MailerSend
+const sendTestEmail = async (email) => {
+    const emailPayload = {
+        from: { email: MAILERSEND_SENDER_EMAIL, name: "Tomato AI (Test)" },
+        to: [{ email }],
+        subject: `[TEST] Your Email Configuration for Tomato AI`,
+        html: `<div style="font-family: Arial, sans-serif; text-align: center; color: #333;"><h2>This is a TEST email from Tomato AI!</h2><p>If you received this, your email configuration is working correctly.</p></div>`
+    };
+    try {
+        const response = await fetch('https://api.mailersend.com/v1/email', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${MAILERSEND_API_TOKEN}`
+            },
+            body: JSON.stringify(emailPayload)
+        });
+        const responseBody = await response.json();
+        if (!response.ok) {
+            console.error('MailerSend API Error (Test):', responseBody);
+            throw { message: 'MailerSend API returned an error.', details: responseBody };
+        }
+        console.log(`Test email sent successfully to ${email}`);
+        return { success: true, message: 'Test email sent successfully!', details: responseBody };
+    } catch (error) {
+        console.error('Error sending test email:', error);
+        throw { message: 'Failed to send test email.', details: error.details || error.message || 'Unknown error' };
+    }
+};
+
+app.post('/api/admin/test-email', checkDb, authenticateToken, isAdmin, checkMailerSend, async (req, res) => {
+    const { testEmail } = req.body;
+    if (!testEmail) {
+        return res.status(400).json({ message: 'testEmail is required.' });
+    }
+    try {
+        const result = await sendTestEmail(testEmail);
+        res.status(200).json(result);
+    } catch (error) {
+        res.status(500).json(error);
+    }
+});
+
 
 app.get('/api/status', async (req, res) => {
     if (!ai) {
