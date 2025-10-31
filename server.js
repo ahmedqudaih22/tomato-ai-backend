@@ -99,6 +99,12 @@ const checkAi = (req, res, next) => {
     if (!ai) return res.status(503).json({ message: aiInitializationError || 'خدمة الذكاء الاصطناعي غير متوفرة.' });
     next();
 };
+const checkMailerSend = (req, res, next) => {
+    if (mailerSendInitializationError) {
+        return res.status(503).json({ message: mailerSendInitializationError });
+    }
+    next();
+};
 
 
 const defaultSettings = {
@@ -190,12 +196,6 @@ const initializeDbSchema = async () => {
 };
 
 const sendVerificationEmail = async (email, code) => {
-    if (!MAILERSEND_API_TOKEN) {
-        console.error("Cannot send email: MailerSend is not configured.");
-        console.log(`--- DEV ONLY: Verification code for ${email} is ${code} ---`);
-        return;
-    }
-
     const emailPayload = {
         from: { email: MAILERSEND_SENDER_EMAIL, name: "Tomato AI" },
         to: [{ email }],
@@ -260,7 +260,7 @@ const isAdmin = (req, res, next) => {
 
 // --- API Routes ---
 
-app.post('/api/register', checkDb, async (req, res) => {
+app.post('/api/register', checkDb, checkMailerSend, async (req, res) => {
     const { email, password, country } = req.body;
     if (!email || !password) return res.status(400).json({ message: 'Email and password are required.' });
     
@@ -359,7 +359,7 @@ app.post('/api/verify-email', checkDb, async (req, res) => {
     }
 });
 
-app.post('/api/resend-verification', checkDb, async (req, res) => {
+app.post('/api/resend-verification', checkDb, checkMailerSend, async (req, res) => {
     const { email } = req.body;
     try {
         const result = await pool.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND status = $2', [email, 'pending']);
