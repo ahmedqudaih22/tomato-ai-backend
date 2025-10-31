@@ -416,28 +416,31 @@ app.post('/api/register', checkDb, async (req, res) => {
     if (!username || !email || !password) return res.status(400).json({ message: 'Username, email and password are required.' });
     if (username.length < 3) return res.status(400).json({ message: 'Username must be at least 3 characters.'});
 
-
-    if (!recaptchaInitializationError) {
-        if (!recaptchaToken) {
-            return res.status(400).json({ message: 'Please complete the reCAPTCHA.' });
-        }
-        try {
-            const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`;
-            const recaptchaRes = await fetch(verificationUrl, { method: 'POST' });
-            const recaptchaData = await recaptchaRes.json();
-            if (!recaptchaData.success) {
-                console.error("reCAPTCHA verification failed:", recaptchaData['error-codes']);
-                return res.status(400).json({ message: 'reCAPTCHA verification failed. Please try again.' });
-            }
-        } catch (e) {
-            console.error("reCAPTCHA request error:", e);
-            return res.status(500).json({ message: 'Could not verify reCAPTCHA. Please contact support.' });
-        }
-    }
-
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
+
+        const userCountResult = await client.query('SELECT COUNT(*) FROM users');
+        const isFirstUser = parseInt(userCountResult.rows[0].count) === 0;
+
+        // Only enforce reCAPTCHA if it's configured AND this is not the first user registration.
+        if (!isFirstUser && !recaptchaInitializationError) {
+            if (!recaptchaToken) {
+                return res.status(400).json({ message: 'Please complete the reCAPTCHA.' });
+            }
+            try {
+                const verificationUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`;
+                const recaptchaRes = await fetch(verificationUrl, { method: 'POST' });
+                const recaptchaData = await recaptchaRes.json();
+                if (!recaptchaData.success) {
+                    console.error("reCAPTCHA verification failed:", recaptchaData['error-codes']);
+                    return res.status(400).json({ message: 'reCAPTCHA verification failed. Please try again.' });
+                }
+            } catch (e) {
+                console.error("reCAPTCHA request error:", e);
+                return res.status(500).json({ message: 'Could not verify reCAPTCHA. Please contact support.' });
+            }
+        }
 
         const existingUser = await client.query('SELECT email, username FROM users WHERE LOWER(email) = LOWER($1) OR LOWER(username) = LOWER($2)', [email, username]);
         if (existingUser.rows.length > 0) {
@@ -451,9 +454,6 @@ app.post('/api/register', checkDb, async (req, res) => {
             }
         }
         
-        const userCountResult = await client.query('SELECT COUNT(*) FROM users');
-        const isFirstUser = parseInt(userCountResult.rows[0].count) === 0;
-
         let referredById = null;
         const currentSettings = await getSettings();
         if (referralCode) {
