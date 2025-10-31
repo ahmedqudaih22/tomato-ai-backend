@@ -265,10 +265,28 @@ app.post('/api/ai/generate', authenticateToken, async (req, res) => {
         
         if (type === 'generateImages') {
             const response = await ai.models.generateImages(params);
-            const base64 = response.generatedImages[0].image.imageBytes;
-            apiResult = { dataUrl: `data:image/png;base64,${base64}` };
+            
+            const blockReason = response.promptFeedback?.blockReason;
+            if (blockReason) {
+                throw new Error("تم حظر الطلب بسبب سياسات الأمان. يرجى تعديل الوصف.");
+            }
+
+            if (response.generatedImages && response.generatedImages.length > 0 && response.generatedImages[0].image.imageBytes) {
+                 const base64 = response.generatedImages[0].image.imageBytes;
+                 apiResult = { dataUrl: `data:image/png;base64,${base64}` };
+            } else {
+                 console.error("Unexpected Imagen response structure:", JSON.stringify(response, null, 2));
+                 throw new Error("فشل الذكاء الاصطناعي في إنشاء الصورة. يرجى تجربة وصف مختلف.");
+            }
+           
         } else if (type === 'generateContent') {
             const response = await ai.models.generateContent(params);
+            
+            const blockReason = response.promptFeedback?.blockReason;
+            if (blockReason) {
+                 throw new Error("تم حظر الطلب بسبب سياسات الأمان. يرجى تعديل طلبك أو الصورة المستخدمة.");
+            }
+            
             const firstPart = response.candidates?.[0]?.content?.parts?.[0];
 
             if (firstPart && firstPart.inlineData) {
@@ -280,21 +298,27 @@ app.post('/api/ai/generate', authenticateToken, async (req, res) => {
                     apiResult = { dataUrl: `data:${mimeType};base64,${base64}` };
                 }
             } else {
-                // Enhanced error handling
-                console.error("Unexpected Gemini response structure:", JSON.stringify(response, null, 2));
-
-                const blockReason = response.promptFeedback?.blockReason;
-                if (blockReason) {
-                    throw new Error(`Request was blocked by the safety filter. Reason: ${blockReason}`);
-                }
-
                 const finishReason = response.candidates?.[0]?.finishReason;
-                if (finishReason && finishReason !== 'STOP') {
-                    throw new Error(`AI generation stopped for an unexpected reason: ${finishReason}.`);
+                let userMessage;
+                switch (finishReason) {
+                    case 'NO_IMAGE':
+                    case 'NO_AUDIO':
+                        userMessage = "فشل الذكاء الاصطناعي في إنشاء المخرجات. قد يكون هذا بسبب قيود الأمان على النص أو المحتوى الذي تم تحميله. يرجى تجربة طلب مختلف.";
+                        break;
+                    case 'SAFETY':
+                        userMessage = "تم حظر الطلب بسبب سياسات الأمان. يرجى تعديل طلبك.";
+                        break;
+                    case 'RECITATION':
+                        userMessage = "تم حظر الطلب لمنع عرض محتوى محمي بحقوق الطبع والنشر.";
+                        break;
+                    case 'OTHER':
+                         userMessage = "توقف الذكاء الاصطناعي لسبب غير معروف. يرجى المحاولة مرة أخرى.";
+                         break;
+                    default:
+                        userMessage = finishReason ? `توقف الإنشاء لسبب غير متوقع: ${finishReason}` : "لم يتم إرجاع البيانات المتوقعة من الذكاء الاصطناعي. قد تكون الاستجابة فارغة.";
                 }
-                
-                // Fallback for other unexpected structures
-                throw new Error("AI call did not return expected data. The model's response was empty or in an unsupported format.");
+                console.error("AI Generation Stopped:", finishReason, JSON.stringify(response, null, 2));
+                throw new Error(userMessage);
             }
         } else {
             throw new Error('Invalid AI operation type');
