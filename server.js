@@ -68,21 +68,11 @@ if (process.env.API_KEY) {
 
 // --- Middleware ---
 
-const allowedOrigins = [
-  'https://tomato-ai-15430077659.us-west1.run.app',
-  'http://localhost:8080'
-];
-const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.warn(`CORS blocked for origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-};
-app.use(cors(corsOptions));
+// Enable CORS for all origins. This is a simple setup.
+// For stricter security in a final production environment, you might want to
+// restrict this to your specific frontend domain, like so:
+// app.use(cors({ origin: 'https://tomato-ai-15430077659.us-west1.run.app' }));
+app.use(cors());
 
 app.use((req, res, next) => {
   if (req.originalUrl === '/stripe-webhook') {
