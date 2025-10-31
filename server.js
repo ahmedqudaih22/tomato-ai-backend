@@ -139,47 +139,65 @@ const initializeDbSchema = async () => {
     try {
         await client.query('BEGIN');
 
+        // Create users table with a minimal schema if it doesn't exist to prevent alter errors.
         await client.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
-                username VARCHAR(50) UNIQUE NOT NULL,
                 email VARCHAR(255) UNIQUE NOT NULL,
-                password VARCHAR(255) NOT NULL,
-                country VARCHAR(10),
-                points INTEGER DEFAULT 10,
-                is_admin BOOLEAN DEFAULT FALSE,
-                status VARCHAR(20) DEFAULT 'active',
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                last_daily_claim TIMESTAMP WITH TIME ZONE,
-                session_token TEXT UNIQUE,
-                token_expires_at TIMESTAMP WITH TIME ZONE,
-                referral_code TEXT UNIQUE,
-                referred_by INTEGER REFERENCES users(id)
+                password VARCHAR(255) NOT NULL
             );
         `);
 
-        // ONE-TIME MIGRATION & RESET (as requested)
-        const columnsRes = await client.query(`SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'username'`);
-        if (columnsRes.rows.length === 0) {
-            console.log("Schema migration required: 'username' column not found.");
-            // Remove columns that are no longer needed for a cleaner schema
-            await client.query('ALTER TABLE users DROP COLUMN IF EXISTS verification_code, DROP COLUMN IF EXISTS verification_expires');
-            // Add the new username column
-            await client.query('ALTER TABLE users ADD COLUMN username VARCHAR(50) UNIQUE');
-            console.log("Schema updated: 'username' column added, verification columns removed.");
+        const columnExists = async (column) => {
+             const res = await client.query(`SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name = $1`, [column]);
+             return res.rows.length > 0;
+        };
+        
+        const addColumn = async (column, definition) => {
+            if (!(await columnExists(column))) {
+                await client.query(`ALTER TABLE users ADD COLUMN ${column} ${definition}`);
+                console.log(`Schema updated: Added '${column}' column to 'users' table.`);
+            }
+        };
 
-            // This is the destructive part requested by the user.
+        // ONE-TIME RESET LOGIC: Use the absence of the 'username' column as the trigger for this destructive operation.
+        if (!(await columnExists('username'))) {
+            console.log("!!! ONE-TIME DATABASE RESET TRIGGERED !!!");
+            // Truncate before adding constraints to avoid issues
             await client.query('TRUNCATE TABLE users CASCADE');
-            console.log("!!! DATABASE RESET !!! User table truncated for a fresh start. The first user to register will be an admin.");
+            console.log("User table truncated for a fresh start. The first user to register will be an admin.");
+        }
+        
+        // --- Schema Migration: Ensure all columns exist ---
+        await addColumn('username', 'VARCHAR(50) UNIQUE');
+        await addColumn('country', 'VARCHAR(10)');
+        await addColumn('points', 'INTEGER DEFAULT 10');
+        await addColumn('is_admin', 'BOOLEAN DEFAULT FALSE');
+        await addColumn('status', 'VARCHAR(20) DEFAULT \'active\'');
+        await addColumn('created_at', 'TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP');
+        await addColumn('last_daily_claim', 'TIMESTAMP WITH TIME ZONE');
+        await addColumn('session_token', 'TEXT UNIQUE');
+        await addColumn('token_expires_at', 'TIMESTAMP WITH TIME ZONE');
+        await addColumn('referral_code', 'TEXT UNIQUE');
+        await addColumn('referred_by', 'INTEGER'); // Add constraint later if needed
+
+        // Cleanup old columns
+        if (await columnExists('verification_code')) {
+            await client.query('ALTER TABLE users DROP COLUMN verification_code');
+            console.log("Schema cleanup: Removed 'verification_code' column.");
+        }
+        if (await columnExists('verification_expires')) {
+            await client.query('ALTER TABLE users DROP COLUMN verification_expires');
+            console.log("Schema cleanup: Removed 'verification_expires' column.");
         }
 
+        // Initialize other tables
         await client.query(`
             CREATE TABLE IF NOT EXISTS settings (
                 id INT PRIMARY KEY DEFAULT 1,
                 config JSONB NOT NULL
             );
         `);
-        
         await client.query(`
             CREATE TABLE IF NOT EXISTS history (
                 id SERIAL PRIMARY KEY,
@@ -191,7 +209,8 @@ const initializeDbSchema = async () => {
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         `);
-
+        
+        // Initialize settings if they don't exist
         const settingsRes = await client.query('SELECT * FROM settings WHERE id = 1');
         if (settingsRes.rows.length === 0) {
             await client.query('INSERT INTO settings (id, config) VALUES (1, $1)', [JSON.stringify(defaultSettings)]);
@@ -199,10 +218,12 @@ const initializeDbSchema = async () => {
         } else {
             console.log("Database schema is ready.");
         }
+
         await client.query('COMMIT');
     } catch (err) {
         await client.query('ROLLBACK');
         console.error("Error initializing database schema:", err);
+        dbInitializationError = `Database initialization failed: ${err.message}`;
     } finally {
         client.release();
     }
@@ -687,8 +708,8 @@ app.post('/api/create-checkout-session', checkDb, checkStripe, authenticateToken
                 quantity: 1,
             }],
             mode: 'payment',
-            success_url: `${process.env.FRONTEND_URL || 'https://tomato-ai-15430077659.us-west1.run.app'}/?payment_success=true#store`,
-            cancel_url: `${process.env.FRONTEND_URL || 'https://tomato-ai-15430077659.us-west1.run.app'}/?payment_cancelled=true#store`,
+            success_url: `${process.env.FRONTEND_URL || 'https://tomatoai.net'}/?payment_success=true#store`,
+            cancel_url: `${process.env.FRONTEND_URL || 'https://tomatoai.net'}/?payment_cancelled=true#store`,
             customer_email: user.email,
             metadata: { userEmail: user.email, pointsToAdd: pkg.points.toString() }
         });
