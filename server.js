@@ -195,20 +195,13 @@ const initializeDbSchema = async () => {
     }
 };
 
-const sendVerificationEmail = async (email, code) => {
+// --- Unified Email Sending Utility ---
+const sendEmail = async (to, subject, html, fromName = "Tomato AI") => {
     const emailPayload = {
-        from: { email: MAILERSEND_SENDER_EMAIL, name: "Tomato AI" },
-        to: [{ email }],
-        subject: `Your Verification Code for Tomato AI`,
-        html: `
-            <div style="font-family: Arial, sans-serif; text-align: center; color: #333;">
-                <h2>Welcome to Tomato AI!</h2>
-                <p>Your verification code is:</p>
-                <p style="font-size: 24px; font-weight: bold; letter-spacing: 5px; background: #f0f0f0; padding: 10px 20px; border-radius: 5px; display: inline-block;">${code}</p>
-                <p>This code will expire in 15 minutes.</p>
-                <p style="font-size: 12px; color: #888;">If you did not request this, please ignore this email.</p>
-            </div>
-        `
+        from: { email: MAILERSEND_SENDER_EMAIL, name: fromName },
+        to: [{ email: to }],
+        subject,
+        html
     };
 
     try {
@@ -222,28 +215,48 @@ const sendVerificationEmail = async (email, code) => {
         });
 
         if (response.ok) {
-            console.log(`Verification email sent successfully to ${email}.`);
-            return;
+            const messageId = response.headers.get('x-message-id');
+            console.log(`Email sent successfully to ${to}. Message ID: ${messageId}`);
+            return {
+                success: true,
+                message: 'Email sent successfully!',
+                details: { status: response.status, statusText: response.statusText, messageId: messageId || 'Not provided' }
+            };
         }
-        
-        // If not OK, handle the error
+
+        // Handle API error responses
         let errorDetails = `Status: ${response.status} ${response.statusText}`;
         try {
             const errorBody = await response.json();
-            console.error('MailerSend API Error on Registration:', errorBody);
+            console.error('MailerSend API Error:', errorBody);
             errorDetails = errorBody.message || errorDetails;
             if (errorBody.errors) {
-                 errorDetails += ` Details: ${JSON.stringify(errorBody.errors)}`;
+                errorDetails += ` Details: ${JSON.stringify(errorBody.errors)}`;
             }
         } catch (e) {
-            console.error('Could not parse MailerSend error response as JSON during registration.');
+            console.error('Could not parse MailerSend error response as JSON.');
         }
-        throw new Error(`Failed to send verification email. Details: ${errorDetails}`);
+        throw new Error(`Failed to send email. Details: ${errorDetails}`);
 
     } catch (error) {
-        console.error('Error in sendVerificationEmail function:', error.message);
-        throw error; // Re-throw the error to be caught by the route handler.
+        console.error('Error in sendEmail function:', error.message);
+        throw error;
     }
+};
+
+
+const sendVerificationEmail = async (email, code) => {
+    const subject = `Your Verification Code for Tomato AI`;
+    const html = `
+        <div style="font-family: Arial, sans-serif; text-align: center; color: #333;">
+            <h2>Welcome to Tomato AI!</h2>
+            <p>Your verification code is:</p>
+            <p style="font-size: 24px; font-weight: bold; letter-spacing: 5px; background: #f0f0f0; padding: 10px 20px; border-radius: 5px; display: inline-block;">${code}</p>
+            <p>This code will expire in 15 minutes.</p>
+            <p style="font-size: 12px; color: #888;">If you did not request this, please ignore this email.</p>
+        </div>
+    `;
+    return sendEmail(email, subject, html);
 };
 
 
@@ -252,16 +265,24 @@ const authenticateToken = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
     if (token == null) return res.sendStatus(401);
+    
+    let client;
     try {
         const userId = parseInt(token);
         if (isNaN(userId)) return res.sendStatus(401);
-        const result = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+
+        client = await pool.connect();
+        const result = await client.query('SELECT id, email, country, points, is_admin, status, last_daily_claim FROM users WHERE id = $1', [userId]);
+        
         if (result.rows.length === 0) return res.sendStatus(403);
+        
         req.user = result.rows[0];
         next();
     } catch (err) {
         console.error("Auth middleware error:", err);
         res.sendStatus(500);
+    } finally {
+        if (client) client.release();
     }
 };
 
@@ -311,7 +332,7 @@ app.post('/api/register', checkDb, checkMailerSend, async (req, res) => {
         res.status(201).json({ message: 'Registration successful! Please check your email to verify your account.', email });
     } catch (err) {
         console.error("Registration Error:", err);
-        if (err.message.includes('Failed to send verification email')) {
+        if (err.message.includes('Failed to send email')) {
             return res.status(500).json({ message: 'Server configuration error: Could not send verification email. Please contact support.' });
         }
         res.status(500).json({ message: 'Internal server error' });
@@ -404,7 +425,7 @@ app.post('/api/resend-verification', checkDb, checkMailerSend, async (req, res) 
 
 app.get('/api/users/me', checkDb, authenticateToken, async (req, res) => {
     const user = req.user;
-    delete user.password;
+    // The user object from authenticateToken already has sensitive fields removed
     res.json({ user });
 });
 
@@ -475,11 +496,10 @@ app.post('/api/ai/generate', checkDb, checkAi, authenticateToken, async (req, re
             throw new Error('Invalid AI operation type');
         }
         
-        const userResult = await client.query('SELECT * FROM users WHERE id = $1', [userId]);
+        const userResult = await client.query('SELECT id, email, country, points, is_admin, status, last_daily_claim FROM users WHERE id = $1', [userId]);
         await client.query('COMMIT');
         
         const user = userResult.rows[0];
-        delete user.password;
         res.json({ result: apiResult, user });
     } catch (err) {
         await client.query('ROLLBACK');
@@ -526,11 +546,10 @@ app.post('/api/claim-daily-reward', checkDb, authenticateToken, async (req, res)
         const pointsToAdd = settingsRes.rows[0].config.costs.dailyRewardPoints || 10;
 
         const result = await pool.query(
-            'UPDATE users SET points = points + $1, last_daily_claim = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+            'UPDATE users SET points = points + $1, last_daily_claim = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, email, country, points, is_admin, status, last_daily_claim',
             [pointsToAdd, userId]
         );
         const user = result.rows[0];
-        delete user.password;
         res.status(200).json({ message: `You have claimed ${pointsToAdd} points!`, user });
     } catch (err) {
         console.error("Daily reward claim error:", err);
@@ -627,11 +646,16 @@ app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req,
 });
 
 app.get('/api/admin/users', checkDb, authenticateToken, isAdmin, async (req, res) => {
+    let client;
     try {
-        const result = await pool.query('SELECT id, email, country, points, is_admin, status, last_daily_claim FROM users ORDER BY id');
+        client = await pool.connect();
+        const result = await client.query('SELECT id, email, country, points, is_admin, status, last_daily_claim FROM users ORDER BY id');
         res.json({ users: result.rows });
     } catch (err) {
+        console.error("Error fetching admin users list:", err);
         res.status(500).json({ message: 'Failed to fetch users' });
+    } finally {
+        if (client) client.release();
     }
 });
 
@@ -656,60 +680,18 @@ app.put('/api/admin/users/:id', checkDb, authenticateToken, isAdmin, async (req,
      }
 });
 
-// New Admin endpoint for testing MailerSend
-const sendTestEmail = async (email) => {
-    const emailPayload = {
-        from: { email: MAILERSEND_SENDER_EMAIL, name: "Tomato AI (Test)" },
-        to: [{ email }],
-        subject: `[TEST] Your Email Configuration for Tomato AI`,
-        html: `<div style="font-family: Arial, sans-serif; text-align: center; color: #333;"><h2>This is a TEST email from Tomato AI!</h2><p>If you received this, your email configuration is working correctly.</p></div>`
-    };
-    try {
-        const response = await fetch('https://api.mailersend.com/v1/email', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${MAILERSEND_API_TOKEN}`
-            },
-            body: JSON.stringify(emailPayload)
-        });
-
-        // Success responses (like 202 Accepted) may have no body.
-        if (response.ok) {
-            const messageId = response.headers.get('x-message-id');
-            console.log(`Test email sent successfully to ${email}. Message ID: ${messageId}`);
-            return { 
-                success: true, 
-                message: 'Test email sent successfully!', 
-                details: { status: response.status, statusText: response.statusText, messageId: messageId || 'Not provided' } 
-            };
-        } else {
-            // If not OK, there should be an error body with details.
-            const errorBody = await response.json();
-            console.error('MailerSend API Error (Test):', errorBody);
-            throw { message: 'MailerSend API returned an error.', details: errorBody };
-        }
-    } catch (error) {
-        console.error('Error sending test email:', error);
-        // If the error is from parsing, it means something unexpected happened.
-        if (error instanceof SyntaxError) {
-            throw { message: 'Received a non-JSON or malformed response from MailerSend.', details: error.message };
-        }
-        // Re-throw formatted error
-        throw { message: error.message || 'Failed to send test email.', details: error.details || error.message || 'Unknown error' };
-    }
-};
-
 app.post('/api/admin/test-email', checkDb, authenticateToken, isAdmin, checkMailerSend, async (req, res) => {
     const { testEmail } = req.body;
     if (!testEmail) {
         return res.status(400).json({ message: 'testEmail is required.' });
     }
     try {
-        const result = await sendTestEmail(testEmail);
+        const subject = `[TEST] Your Email Configuration for Tomato AI`;
+        const html = `<div style="font-family: Arial, sans-serif; text-align: center; color: #333;"><h2>This is a TEST email from Tomato AI!</h2><p>If you received this, your email configuration is working correctly.</p></div>`;
+        const result = await sendEmail(testEmail, subject, html, "Tomato AI (Test)");
         res.status(200).json(result);
     } catch (error) {
-        res.status(500).json(error);
+        res.status(500).json({ message: error.message || 'Failed to send test email.', details: error.details || error.message || 'Unknown error' });
     }
 });
 
