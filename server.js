@@ -9,46 +9,103 @@ require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 3001;
 
+// --- Service Initialization & Health ---
+
+let pool;
+let dbInitializationError = null;
+if (process.env.DATABASE_URL) {
+    try {
+        pool = new Pool({
+            connectionString: process.env.DATABASE_URL,
+            ssl: { rejectUnauthorized: false }
+        });
+        console.log("Database pool created.");
+    } catch (e) {
+        dbInitializationError = "فشل في إنشاء اتصال قاعدة البيانات. تحقق من متغير البيئة DATABASE_URL.";
+        console.error(dbInitializationError, e);
+        pool = null;
+    }
+} else {
+    dbInitializationError = "متغير البيئة DATABASE_URL غير موجود. تم تعطيل الميزات التي تعتمد على قاعدة البيانات.";
+    console.warn(dbInitializationError);
+}
+
+let stripe;
+let stripeInitializationError = null;
+if (process.env.STRIPE_SECRET_KEY) {
+    try {
+        stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+        console.log("Stripe initialized.");
+    } catch (e) {
+        stripeInitializationError = "فشل في تهيئة Stripe. تحقق من متغير البيئة STRIPE_SECRET_KEY.";
+        console.error(stripeInitializationError, e);
+        stripe = null;
+    }
+} else {
+    stripeInitializationError = "متغير البيئة STRIPE_SECRET_KEY غير موجود. تم تعطيل ميزات الدفع.";
+    console.warn(stripeInitializationError);
+}
+const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+if (!webhookSecret) {
+    console.warn("متغير البيئة STRIPE_WEBHOOK_SECRET غير موجود. سيفشل التحقق من الويب هوك.");
+}
+
+let ai;
+let aiInitializationError = null;
+if (process.env.API_KEY) {
+    try {
+        ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        console.log("GoogleGenAI initialized successfully.");
+    } catch(e) {
+        ai = null;
+        aiInitializationError = "فشل في تهيئة GoogleGenAI. تحقق من صلاحية API_KEY.";
+        console.error(aiInitializationError, e);
+    }
+} else {
+    aiInitializationError = "متغير البيئة API_KEY غير موجود على الخادم. تم تعطيل ميزات الذكاء الاصطناعي.";
+    console.warn(aiInitializationError);
+}
+
 // --- Middleware ---
 
-// CORS Configuration - IMPORTANT: This must be one of the first middleware.
 const allowedOrigins = [
-  'https://tomato-ai-15430077659.us-west1.run.app', // Production Frontend
-  'http://localhost:8080' // For local development, if you use one
+  'https://tomato-ai-15430077659.us-west1.run.app',
+  'http://localhost:8080'
 ];
-
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps, curl, or same-origin requests)
-    // or from our allowed list.
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      console.warn(`CORS blocked for origin: ${origin}`); // Log blocked origins for debugging
+      console.warn(`CORS blocked for origin: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
 };
 app.use(cors(corsOptions));
 
-
-// The Stripe webhook endpoint needs the raw body, so we apply express.json() conditionally.
 app.use((req, res, next) => {
   if (req.originalUrl === '/stripe-webhook') {
     next();
   } else {
-    express.json({ limit: '10mb' })(req, res, next); // Increase limit for data URLs
+    express.json({ limit: '10mb' })(req, res, next);
   }
 });
 
+// --- Service Availability Middleware ---
+const checkDb = (req, res, next) => {
+    if (!pool) return res.status(503).json({ message: dbInitializationError || 'خدمة قاعدة البيانات غير متوفرة.' });
+    next();
+};
+const checkStripe = (req, res, next) => {
+    if (!stripe) return res.status(503).json({ message: stripeInitializationError || 'خدمة الدفع غير متوفرة.' });
+    next();
+};
+const checkAi = (req, res, next) => {
+    if (!ai) return res.status(503).json({ message: aiInitializationError || 'خدمة الذكاء الاصطناعي غير متوفرة.' });
+    next();
+};
 
-// --- Database Connection ---
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
-});
 
 const defaultSettings = {
     costs: { imageEdit: 2, imageCreate: 5, textToSpeech: 1 },
@@ -59,9 +116,11 @@ const defaultSettings = {
     announcement: { enabled: false, imageUrl: "", contentAr: "<h1>عرض خاص!</h1><p>احصل على ضعف النقاط عند الشراء هذا الأسبوع.</p>", contentEn: "<h1>Special Offer!</h1><p>Get double the points on all purchases this week.</p>" }
 };
 
-
-// --- Database Initialization ---
-const initializeDb = async () => {
+const initializeDbSchema = async () => {
+    if (!pool) {
+        console.warn("Database pool not available. Skipping DB schema initialization.");
+        return;
+    }
     const client = await pool.connect();
     try {
         await client.query(`
@@ -76,66 +135,36 @@ const initializeDb = async () => {
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log("Database initialized: 'users' table is ready.");
-        
         await client.query(`
             CREATE TABLE IF NOT EXISTS settings (
                 id INT PRIMARY KEY DEFAULT 1,
                 config JSONB NOT NULL
             );
         `);
-         const settingsRes = await client.query('SELECT * FROM settings WHERE id = 1');
+        const settingsRes = await client.query('SELECT * FROM settings WHERE id = 1');
         if (settingsRes.rows.length === 0) {
             await client.query('INSERT INTO settings (id, config) VALUES (1, $1)', [JSON.stringify(defaultSettings)]);
             console.log("Database initialized: Default settings inserted.");
         } else {
-            console.log("Database initialized: 'settings' table is ready.");
+            console.log("Database schema is ready.");
         }
-
     } catch (err) {
-        console.error("Error initializing database:", err);
-        throw err; // Re-throw the error to be caught by the server starter
+        console.error("Error initializing database schema:", err);
     } finally {
         client.release();
     }
 };
 
-// --- Stripe Setup ---
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-// --- Gemini AI Setup ---
-let ai;
-let aiInitializationError = null;
-if (process.env.API_KEY) {
-    try {
-        ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        console.log("GoogleGenAI initialized successfully.");
-    } catch(e) {
-        ai = null;
-        aiInitializationError = "Failed to initialize GoogleGenAI. Check if the API_KEY is valid.";
-        console.error(aiInitializationError, e);
-    }
-} else {
-    aiInitializationError = "API_KEY environment variable not set on the server. AI features are disabled.";
-    console.warn(aiInitializationError);
-}
-
-// --- Auth Middleware ---
 const authenticateToken = async (req, res, next) => {
+    if (!pool) return res.status(503).json({ message: dbInitializationError });
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
     if (token == null) return res.sendStatus(401);
-
     try {
-        // Simple token is user ID. In production, use JWT.
         const userId = parseInt(token);
         if (isNaN(userId)) return res.sendStatus(401);
-
         const result = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
-        if (result.rows.length === 0) {
-            return res.sendStatus(403);
-        }
+        if (result.rows.length === 0) return res.sendStatus(403);
         req.user = result.rows[0];
         next();
     } catch (err) {
@@ -151,82 +180,56 @@ const isAdmin = (req, res, next) => {
     next();
 };
 
-
 // --- API Routes ---
 
-// User Registration
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', checkDb, async (req, res) => {
     const { email, password, country } = req.body;
-    if (!email || !password) {
-        return res.status(400).json({ message: 'Email and password are required.' });
-    }
-
+    if (!email || !password) return res.status(400).json({ message: 'Email and password are required.' });
     try {
-        // Check if it's the first user, make them admin
         const userCountResult = await pool.query('SELECT COUNT(*) FROM users');
         const isFirstUser = parseInt(userCountResult.rows[0].count) === 0;
-
-        // In a real app, you MUST hash the password.
         const result = await pool.query(
             'INSERT INTO users (email, password, country, is_admin) VALUES (LOWER($1), $2, $3, $4) RETURNING id, email, country, points, is_admin, status',
             [email, password, country, isFirstUser]
         );
-        
         const user = result.rows[0];
-        // For simplicity, we'll use the user ID as a token. Use JWT in production.
-        const token = user.id.toString(); 
-
+        const token = user.id.toString();
         res.status(201).json({ message: 'User registered successfully', user, token });
-
     } catch (err) {
-        if (err.code === '23505') { // unique_violation
-            return res.status(409).json({ message: 'Email already exists.' });
-        }
+        if (err.code === '23505') return res.status(409).json({ message: 'Email already exists.' });
         console.error("Registration Error:", err);
         res.status(500).json({ message: 'Internal server error' });
     }
 });
 
-// User Login
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', checkDb, async (req, res) => {
     const { email, password } = req.body;
     try {
         const result = await pool.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
-        if (result.rows.length === 0) {
-            return res.status(401).json({ message: 'Invalid credentials' });
-        }
+        if (result.rows.length === 0) return res.status(401).json({ message: 'Invalid credentials' });
         const user = result.rows[0];
-        if (user.password !== password) { // IMPORTANT: In production, use bcrypt.compare
-            return res.status(401).json({ message: 'Invalid credentials' });
-        }
-        if (user.status === 'banned') {
-            return res.status(403).json({ message: 'This account is banned.' });
-        }
-        
+        if (user.password !== password) return res.status(401).json({ message: 'Invalid credentials' });
+        if (user.status === 'banned') return res.status(403).json({ message: 'This account is banned.' });
         const token = user.id.toString();
         delete user.password;
         res.status(200).json({ message: 'Login successful', user, token });
-
     } catch (err) {
         console.error("Login error:", err);
         res.status(500).json({ message: 'Internal server error' });
     }
 });
 
-// --- User Routes (Authenticated) ---
-app.get('/api/users/me', authenticateToken, async (req, res) => {
+app.get('/api/users/me', checkDb, authenticateToken, async (req, res) => {
     const user = req.user;
     delete user.password;
     res.json({ user });
 });
 
-app.put('/api/users/me', authenticateToken, async (req, res) => {
+app.put('/api/users/me', checkDb, authenticateToken, async (req, res) => {
     const { email, password } = req.body;
     const userId = req.user.id;
-    
     try {
-        let query;
-        let queryParams;
+        let query, queryParams;
         if (password) {
             query = 'UPDATE users SET email = LOWER($1), password = $2 WHERE id = $3 RETURNING id, email, country, points, is_admin, status';
             queryParams = [email, password, userId];
@@ -242,39 +245,10 @@ app.put('/api/users/me', authenticateToken, async (req, res) => {
     }
 });
 
-// Note: This endpoint is no longer used by the client but kept for potential future use.
-app.post('/api/users/deduct-points', authenticateToken, async (req, res) => {
-    const { amount } = req.body;
-    const userId = req.user.id;
-
-    if (req.user.points < amount) {
-        return res.status(402).json({ message: 'Insufficient points' });
-    }
-
-    try {
-        const result = await pool.query(
-            'UPDATE users SET points = points - $1 WHERE id = $2 RETURNING id, email, country, points, is_admin, status',
-            [amount, userId]
-        );
-        res.json({ user: result.rows[0] });
-    } catch(err) {
-        console.error("Deduct points error:", err);
-        res.status(500).json({ message: 'Error updating points' });
-    }
-});
-
-// --- AI Generation Proxy ---
-app.post('/api/ai/generate', authenticateToken, async (req, res) => {
-    if (!ai) {
-        const message = aiInitializationError || 'AI services are not available on the server.';
-        return res.status(503).json({ message });
-    }
+app.post('/api/ai/generate', checkDb, checkAi, authenticateToken, async (req, res) => {
     const { cost, payload } = req.body;
     const userId = req.user.id;
-
-    if (req.user.points < cost) {
-        return res.status(402).json({ message: 'Insufficient points' });
-    }
+    if (req.user.points < cost) return res.status(402).json({ message: 'Insufficient points' });
     
     const client = await pool.connect();
     try {
@@ -286,58 +260,30 @@ app.post('/api/ai/generate', authenticateToken, async (req, res) => {
         
         if (type === 'generateImages') {
             const response = await ai.models.generateImages(params);
-            
-            const blockReason = response.promptFeedback?.blockReason;
-            if (blockReason) {
-                throw new Error("تم حظر الطلب بسبب سياسات الأمان. يرجى تعديل الوصف.");
-            }
-
-            if (response.generatedImages && response.generatedImages.length > 0 && response.generatedImages[0].image.imageBytes) {
-                 const base64 = response.generatedImages[0].image.imageBytes;
-                 apiResult = { dataUrl: `data:image/png;base64,${base64}` };
+            if (response.promptFeedback?.blockReason) throw new Error("تم حظر الطلب بسبب سياسات الأمان. يرجى تعديل الوصف.");
+            if (response.generatedImages?.[0]?.image?.imageBytes) {
+                 apiResult = { dataUrl: `data:image/png;base64,${response.generatedImages[0].image.imageBytes}` };
             } else {
-                 console.error("Unexpected Imagen response structure:", JSON.stringify(response, null, 2));
+                 console.error("Unexpected Imagen response:", JSON.stringify(response, null, 2));
                  throw new Error("فشل الذكاء الاصطناعي في إنشاء الصورة. يرجى تجربة وصف مختلف.");
             }
-           
         } else if (type === 'generateContent') {
             const response = await ai.models.generateContent(params);
-            
-            const blockReason = response.promptFeedback?.blockReason;
-            if (blockReason) {
-                 throw new Error("تم حظر الطلب بسبب سياسات الأمان. يرجى تعديل طلبك أو الصورة المستخدمة.");
-            }
-            
+            if (response.promptFeedback?.blockReason) throw new Error("تم حظر الطلب بسبب سياسات الأمان. يرجى تعديل طلبك أو الصورة المستخدمة.");
             const firstPart = response.candidates?.[0]?.content?.parts?.[0];
-
-            if (firstPart && firstPart.inlineData) {
-                const base64 = firstPart.inlineData.data;
-                const mimeType = firstPart.inlineData.mimeType;
+            if (firstPart?.inlineData) {
                 if (params.config?.responseModalities?.includes('AUDIO')) {
-                    apiResult = { base64Audio: base64 };
-                } else { // Assume image
-                    apiResult = { dataUrl: `data:${mimeType};base64,${base64}` };
+                    apiResult = { base64Audio: firstPart.inlineData.data };
+                } else {
+                    apiResult = { dataUrl: `data:${firstPart.inlineData.mimeType};base64,${firstPart.inlineData.data}` };
                 }
             } else {
                 const finishReason = response.candidates?.[0]?.finishReason;
-                let userMessage;
-                switch (finishReason) {
-                    case 'NO_IMAGE':
-                    case 'NO_AUDIO':
-                        userMessage = "فشل الذكاء الاصطناعي في إنشاء المخرجات. قد يكون هذا بسبب قيود الأمان على النص أو المحتوى الذي تم تحميله. يرجى تجربة طلب مختلف.";
-                        break;
-                    case 'SAFETY':
-                        userMessage = "تم حظر الطلب بسبب سياسات الأمان. يرجى تعديل طلبك.";
-                        break;
-                    case 'RECITATION':
-                        userMessage = "تم حظر الطلب لمنع عرض محتوى محمي بحقوق الطبع والنشر.";
-                        break;
-                    case 'OTHER':
-                         userMessage = "توقف الذكاء الاصطناعي لسبب غير معروف. يرجى المحاولة مرة أخرى.";
-                         break;
-                    default:
-                        userMessage = finishReason ? `توقف الإنشاء لسبب غير متوقع: ${finishReason}` : "لم يتم إرجاع البيانات المتوقعة من الذكاء الاصطناعي. قد تكون الاستجابة فارغة.";
-                }
+                let userMessage = finishReason ? `توقف الإنشاء لسبب غير متوقع: ${finishReason}` : "لم يتم إرجاع البيانات المتوقعة من الذكاء الاصطناعي. قد تكون الاستجابة فارغة.";
+                if (['NO_IMAGE', 'NO_AUDIO'].includes(finishReason)) userMessage = "فشل الذكاء الاصطناعي في إنشاء المخرجات. قد يكون هذا بسبب قيود الأمان على النص أو المحتوى الذي تم تحميله. يرجى تجربة طلب مختلف.";
+                else if (finishReason === 'SAFETY') userMessage = "تم حظر الطلب بسبب سياسات الأمان. يرجى تعديل طلبك.";
+                else if (finishReason === 'RECITATION') userMessage = "تم حظر الطلب لمنع عرض محتوى محمي بحقوق الطبع والنشر.";
+                else if (finishReason === 'OTHER') userMessage = "توقف الذكاء الاصطناعي لسبب غير معروف. يرجى المحاولة مرة أخرى.";
                 console.error("AI Generation Stopped:", finishReason, JSON.stringify(response, null, 2));
                 throw new Error(userMessage);
             }
@@ -350,27 +296,17 @@ app.post('/api/ai/generate', authenticateToken, async (req, res) => {
         
         const user = userResult.rows[0];
         delete user.password;
-        
         res.json({ result: apiResult, user });
-
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error("AI Generation Error:", err.message);
-        if (err.cause) {
-            console.error("Error Cause:", err.cause);
-        }
-        console.error("Error Stack:", err.stack);
+        console.error("AI Generation Error:", err.message, err.stack);
         res.status(500).json({ message: err.message || 'An error occurred during AI generation.' });
     } finally {
         client.release();
     }
 });
 
-app.post('/api/ai/remove-background', authenticateToken, isAdmin, async (req, res) => {
-    if (!ai) {
-        const message = aiInitializationError || 'AI services are not available on the server.';
-        return res.status(503).json({ message });
-    }
+app.post('/api/ai/remove-background', checkAi, authenticateToken, isAdmin, async (req, res) => {
     try {
         const { imagePart, textPart } = req.body;
         const response = await ai.models.generateContent({
@@ -378,12 +314,9 @@ app.post('/api/ai/remove-background', authenticateToken, isAdmin, async (req, re
             contents: { parts: [imagePart, textPart] },
             config: { responseModalities: ['IMAGE'] },
         });
-
         const firstPart = response.candidates?.[0]?.content?.parts?.[0];
-        if (firstPart && firstPart.inlineData) {
-            const newBase64 = firstPart.inlineData.data;
-            const newMimeType = firstPart.inlineData.mimeType;
-            res.json({ dataUrl: `data:${newMimeType};base64,${newBase64}` });
+        if (firstPart?.inlineData) {
+            res.json({ dataUrl: `data:${firstPart.inlineData.mimeType};base64,${firstPart.inlineData.data}` });
         } else {
             throw new Error("AI background removal failed to return an image.");
         }
@@ -393,42 +326,22 @@ app.post('/api/ai/remove-background', authenticateToken, isAdmin, async (req, re
     }
 });
 
-
-// --- Settings Routes ---
-app.get('/api/settings', async (req, res) => {
-    let client;
+app.get('/api/settings', checkDb, async (req, res) => {
     try {
-        client = await pool.connect();
-        let result = await client.query('SELECT config FROM settings WHERE id = 1');
-        
-        // SELF-HEALING: If settings don't exist, create and return them.
-        if (result.rows.length === 0) {
-            console.warn("Settings not found, creating from default...");
-            await client.query('INSERT INTO settings (id, config) VALUES (1, $1) ON CONFLICT (id) DO NOTHING', [JSON.stringify(defaultSettings)]);
-            // Re-fetch the settings after insertion
-            result = await client.query('SELECT config FROM settings WHERE id = 1');
-            console.log("Default settings successfully created and fetched.");
-        }
-        
+        const result = await pool.query('SELECT config FROM settings WHERE id = 1');
         if (result.rows.length > 0) {
             res.json(result.rows[0].config);
         } else {
-             // This case should now be virtually impossible to reach.
-            console.error("CRITICAL: Failed to fetch settings even after attempting to create them.");
-            res.status(500).json({ message: 'Failed to retrieve or create settings.' });
+            console.warn("Settings not found, returning default. DB might be initializing.");
+            res.json(defaultSettings);
         }
-
     } catch (err) {
         console.error("Get settings error:", err);
         res.status(500).json({ message: 'Failed to fetch settings' });
-    } finally {
-        if (client) {
-            client.release();
-        }
     }
 });
 
-app.put('/api/admin/settings', authenticateToken, isAdmin, async (req, res) => {
+app.put('/api/admin/settings', checkDb, authenticateToken, isAdmin, async (req, res) => {
     const newSettings = req.body;
     try {
         await pool.query('UPDATE settings SET config = $1 WHERE id = 1', [newSettings]);
@@ -439,30 +352,21 @@ app.put('/api/admin/settings', authenticateToken, isAdmin, async (req, res) => {
     }
 });
 
-// --- Store & Payment Routes ---
-app.post('/api/create-checkout-session', authenticateToken, async (req, res) => {
+app.post('/api/create-checkout-session', checkDb, checkStripe, authenticateToken, async (req, res) => {
     const { packageId } = req.body;
     const user = req.user;
-
     try {
         const settingsRes = await pool.query('SELECT config FROM settings WHERE id = 1');
-        const settings = settingsRes.rows[0].config;
-        const pkg = settings.store.packages.find(p => p.id === packageId);
-
-        if (!pkg) {
-            return res.status(404).json({ message: 'Package not found.' });
-        }
+        const pkg = settingsRes.rows[0].config.store.packages.find(p => p.id === packageId);
+        if (!pkg) return res.status(404).json({ message: 'Package not found.' });
 
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
             line_items: [{
                 price_data: {
                     currency: 'usd',
-                    product_data: {
-                        name: `${pkg.points} Points Package`,
-                        description: `Get ${pkg.points} points for your Tomato AI account.`,
-                    },
-                    unit_amount: pkg.price * 100, // Price in cents
+                    product_data: { name: `${pkg.points} Points Package` },
+                    unit_amount: pkg.price * 100,
                 },
                 quantity: 1,
             }],
@@ -470,10 +374,7 @@ app.post('/api/create-checkout-session', authenticateToken, async (req, res) => 
             success_url: `${process.env.FRONTEND_URL || 'https://tomato-ai-15430077659.us-west1.run.app'}/?payment_success=true#store`,
             cancel_url: `${process.env.FRONTEND_URL || 'https://tomato-ai-15430077659.us-west1.run.app'}/?payment_cancelled=true#store`,
             customer_email: user.email,
-            metadata: {
-                userEmail: user.email,
-                pointsToAdd: pkg.points.toString(),
-            }
+            metadata: { userEmail: user.email, pointsToAdd: pkg.points.toString() }
         });
         res.json({ url: session.url });
     } catch (err) {
@@ -482,12 +383,13 @@ app.post('/api/create-checkout-session', authenticateToken, async (req, res) => 
     }
 });
 
-
-// --- Stripe Webhook ---
 app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req, res) => {
+  if (!stripe || !pool) {
+    console.warn('Webhook received but Stripe or DB is not configured. Aborting.');
+    return res.status(503).send('Webhook handler is not available.');
+  }
   const sig = req.headers['stripe-signature'];
   let event;
-
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
   } catch (err) {
@@ -495,39 +397,23 @@ app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req,
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // Handle the event
   if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    
-    const userEmail = session.metadata.userEmail;
-    const pointsToAdd = parseInt(session.metadata.pointsToAdd, 10);
-
+    const { userEmail, pointsToAdd } = event.data.object.metadata;
     if (userEmail && pointsToAdd) {
         console.log(`Payment successful for ${userEmail}. Attempting to add ${pointsToAdd} points.`);
         try {
-            const result = await pool.query(
-                'UPDATE users SET points = points + $1 WHERE LOWER(email) = LOWER($2) RETURNING email, points',
-                [pointsToAdd, userEmail]
-            );
-            if (result.rowCount > 0) {
-                 console.log(`Successfully added ${pointsToAdd} points to ${result.rows[0].email}. New balance: ${result.rows[0].points}`);
-            } else {
-                console.warn(`Webhook received for non-existent user email: ${userEmail}`);
-            }
+            const result = await pool.query('UPDATE users SET points = points + $1 WHERE LOWER(email) = LOWER($2) RETURNING email, points', [parseInt(pointsToAdd, 10), userEmail]);
+            if (result.rowCount > 0) console.log(`Successfully added points to ${result.rows[0].email}.`);
+            else console.warn(`Webhook received for non-existent user email: ${userEmail}`);
         } catch (err) {
             console.error('Error updating user points from webhook:', err);
         }
-    } else {
-        console.warn('Webhook received without required metadata (userEmail, pointsToAdd).');
     }
   }
-
   res.status(200).json({ received: true });
 });
 
-
-// --- Admin Routes ---
-app.get('/api/admin/users', authenticateToken, isAdmin, async (req, res) => {
+app.get('/api/admin/users', checkDb, authenticateToken, isAdmin, async (req, res) => {
     try {
         const result = await pool.query('SELECT id, email, country, points, is_admin, status FROM users ORDER BY id');
         res.json({ users: result.rows });
@@ -536,43 +422,28 @@ app.get('/api/admin/users', authenticateToken, isAdmin, async (req, res) => {
     }
 });
 
-app.put('/api/admin/users/:id', authenticateToken, isAdmin, async (req, res) => {
+app.put('/api/admin/users/:id', checkDb, authenticateToken, isAdmin, async (req, res) => {
      const targetUserId = parseInt(req.params.id);
      const { points, status } = req.body;
-     const adminUserId = req.user.id;
-     
      if (isNaN(targetUserId)) return res.status(400).json({ message: 'Invalid user ID' });
-
      try {
         const targetUserRes = await pool.query('SELECT * FROM users WHERE id = $1', [targetUserId]);
-        if (targetUserRes.rows.length === 0) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-        const targetUser = targetUserRes.rows[0];
-
-        // Safety check: Prevent an admin from banning themselves
-        if (targetUser.is_admin && targetUser.id === adminUserId && status === 'banned') {
+        if (targetUserRes.rows.length === 0) return res.status(404).json({ message: 'User not found' });
+        if (targetUserRes.rows[0].is_admin && req.user.id === targetUserId && status === 'banned') {
              return res.status(403).json({ message: 'Admins cannot ban themselves.' });
         }
-
         const result = await pool.query(
             'UPDATE users SET points = points + $1, status = $2 WHERE id = $3 RETURNING id, email, country, points, is_admin, status',
             [points, status, targetUserId]
         );
-
-        if (result.rowCount > 0) {
-            res.json({ user: result.rows[0] });
-        } else {
-            // This case should ideally not be reached due to the check above
-            res.status(404).json({ message: 'User not found' });
-        }
+        res.json({ user: result.rows[0] });
      } catch (err) {
         console.error("Admin user update error:", err);
         res.status(500).json({ message: 'Failed to update user' });
      }
 });
 
-app.delete('/api/admin/users', authenticateToken, isAdmin, async(req, res) => {
+app.delete('/api/admin/users', checkDb, authenticateToken, isAdmin, async(req, res) => {
     try {
         await pool.query("DELETE FROM users WHERE is_admin = FALSE");
         res.status(200).json({message: 'All non-admin users deleted.'});
@@ -581,22 +452,16 @@ app.delete('/api/admin/users', authenticateToken, isAdmin, async(req, res) => {
     }
 });
 
-// --- Server Status Route ---
 app.get('/api/status', async (req, res) => {
     if (!ai) {
         return res.json({
             ai_enabled: false,
             message: aiInitializationError,
-            message_ar: "خدمات الذكاء الاصطناعي معطلة: لم يتم العثور على مفتاح الواجهة البرمجية (API Key)."
+            message_ar: aiInitializationError || "خدمات الذكاء الاصطناعي معطلة."
         });
     }
-
     try {
-        // Perform a quick, low-cost test call to validate the API key
-        await ai.models.generateContent({
-            model: 'gemini-2.5-flash', // Use a fast and cheap model for the test
-            contents: 'hello',
-        });
+        await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: 'hello' });
         res.json({
             ai_enabled: true,
             message: 'AI services are operational and the API key is valid.',
@@ -606,7 +471,6 @@ app.get('/api/status', async (req, res) => {
         console.error("AI Status Check Error:", error.message);
         let userMessage = "The API key is likely invalid or has restrictions.";
         let userMessageAr = "مفتاح الواجهة البرمجية (API Key) غير صالح على الأرجح أو عليه قيود.";
-        
         if (error.message.includes('API key not valid')) {
             userMessage = "API key not valid. Please check your key.";
             userMessageAr = "مفتاح الواجهة البرمجية (API Key) غير صالح. يرجى التحقق من المفتاح الخاص بك.";
@@ -617,28 +481,13 @@ app.get('/api/status', async (req, res) => {
             userMessage = "The API key does not have permission to use the Gemini API.";
             userMessageAr = "مفتاح الواجهة البرمجية لا يملك الصلاحية لاستخدام Gemini API.";
         }
-        
-        res.json({
-            ai_enabled: false,
-            message: userMessage,
-            message_ar: userMessageAr
-        });
+        res.json({ ai_enabled: false, message: userMessage, message_ar: userMessageAr });
     }
 });
 
-
 // --- Start Server ---
-const startServer = async () => {
-    try {
-        // Wait for the database to be ready before starting the server
-        await initializeDb();
-        app.listen(port, () => {
-            console.log(`Server listening on port ${port}`);
-        });
-    } catch (error) {
-        console.error("Failed to initialize database and start server:", error);
-        process.exit(1); // Exit if the database can't be initialized
-    }
-};
-
-startServer();
+app.listen(port, async () => {
+    console.log(`Server listening on port ${port}`);
+    // Initialize the DB schema after the server starts listening
+    await initializeDbSchema();
+});
