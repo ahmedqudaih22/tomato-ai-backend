@@ -98,6 +98,7 @@ const defaultSettings = {
         imageCreate_noWatermark: 15,
         contentRewrite: 1,
         tweetGenerator: 1,
+        newUserPoints: 25, // Points for new users
     },
     theme: { 
         logoUrl: "https://i.ibb.co/mH2WvTz/tomato-logo.png", 
@@ -181,7 +182,7 @@ const defaultSettings = {
     },
     announcement: {
         enabled: false,
-        imageUrl: "https://example.com/image.png",
+        imageUrl: "",
         contentEn: "<h3>Big News!</h3><p>We've just launched a new feature. Check it out now!</p>",
         contentAr: "<h3>خبر عاجل!</h3><p>لقد أطلقنا ميزة جديدة. تفقدها الآن!</p>",
         textColor: "#000000",
@@ -203,14 +204,10 @@ const initializeDatabase = async () => {
     let client;
     try {
         client = await pool.connect();
+        
+        console.log("Ensuring database schema exists...");
 
-        // --- Definitive Fix: Drop all tables to ensure a clean schema from scratch ---
-        console.log("Dropping existing tables to guarantee a clean schema...");
-        await client.query('DROP TABLE IF EXISTS history, operations, users, settings CASCADE;');
-        console.log("All tables dropped successfully.");
-
-        // --- Create Tables with the correct schema ---
-        console.log("Recreating tables...");
+        // Create tables with "IF NOT EXISTS" to ensure data persistence
         await client.query(`
             CREATE TABLE IF NOT EXISTS settings (
                 key VARCHAR(255) PRIMARY KEY,
@@ -249,27 +246,20 @@ const initializeDatabase = async () => {
             );
         `);
         
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS operations (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(255) UNIQUE NOT NULL,
-                status VARCHAR(50) DEFAULT 'pending',
-                result JSONB,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
-        
-        console.log("Tables recreated successfully.");
+        // --- Insert Default Settings if they don't exist ---
+        console.log('Checking for default settings...');
+        const settingsCheck = await client.query("SELECT key FROM settings WHERE key = 'app_settings'");
+        if (settingsCheck.rows.length === 0) {
+            console.log('No settings found, inserting defaults...');
+            await client.query("INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING", ['app_settings', JSON.stringify(defaultSettings)]);
+            console.log('Default settings inserted.');
+        } else {
+            console.log('Settings already exist.');
+        }
 
-        // --- Insert Default Settings ---
-        console.log('Inserting default settings...');
-        await client.query("INSERT INTO settings (key, value) VALUES ($1, $2)", ['app_settings', JSON.stringify(defaultSettings)]);
-        console.log('Default settings inserted.');
-
-        console.log('Database schema initialization and reset complete.');
+        console.log('Database schema initialization complete.');
     } catch (err) {
-        console.error('Database initialization/reset failed:', err);
+        console.error('Database initialization failed:', err);
         dbInitializationError = `فشل في تهيئة/ترحيل مخطط قاعدة البيانات: ${err.message}`;
         throw err;
     } finally {
@@ -364,6 +354,8 @@ app.post('/api/register', async (req, res) => {
     try {
         await client.query('BEGIN');
 
+        const settings = await getSettings(client);
+
         // Check if email or username exists
         const emailExists = await client.query('SELECT id FROM users WHERE email = $1', [email]);
         if (emailExists.rows.length > 0) {
@@ -374,7 +366,7 @@ app.post('/api/register', async (req, res) => {
             return res.status(409).json({ message: 'Username already exists.' });
         }
         
-        let initialPoints = 10;
+        let initialPoints = settings.costs.newUserPoints || 10;
         let referrerId = null;
 
         // Handle referral logic
@@ -383,7 +375,7 @@ app.post('/api/register', async (req, res) => {
             if (referrerResult.rows.length > 0) {
                 const referrer = referrerResult.rows[0];
                 referrerId = referrer.id;
-                const referralBonus = (await getSettings(client)).costs.referralBonus || 50;
+                const referralBonus = settings.costs.referralBonus || 50;
                 
                 await client.query('UPDATE users SET points = points + $1, referrals = COALESCE(referrals, 0) + 1 WHERE id = $2', [referralBonus, referrerId]);
 
@@ -690,8 +682,9 @@ app.post('/api/create-checkout-session', authMiddleware, async (req, res) => {
         const userRes = await client.query('SELECT email FROM users WHERE id = $1', [req.userId]);
         const userEmail = userRes.rows[0].email;
         
-        const successUrl = `${process.env.FRONTEND_URL || 'http://localhost:8080'}?payment_success=true`;
-        const cancelUrl = `${process.env.FRONTEND_URL || 'http://localhost:8080'}?payment_cancelled=true`;
+        // --- FIX: Use the canonical URL for Stripe redirects ---
+        const successUrl = 'https://tomatoai.net/#store?payment_success=true';
+        const cancelUrl = 'https://tomatoai.net/#store?payment_cancelled=true';
         
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
@@ -714,7 +707,8 @@ app.post('/api/create-checkout-session', authMiddleware, async (req, res) => {
 
     } catch (error) {
         console.error("Stripe session error:", error);
-        res.status(500).json({ message: 'Failed to create checkout session' });
+        // --- FIX: Return the specific error message from Stripe ---
+        res.status(500).json({ message: 'Failed to create checkout session', error: error.message });
     } finally {
         client.release();
     }
