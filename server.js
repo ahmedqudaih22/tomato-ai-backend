@@ -217,7 +217,6 @@ const initializeDatabase = async () => {
                 last_login TIMESTAMP WITH TIME ZONE,
                 referral_code VARCHAR(20) UNIQUE,
                 referrer_id INTEGER,
-                referrals INTEGER DEFAULT 0,
                 last_daily_claim TIMESTAMP WITH TIME ZONE
             );
         `);
@@ -647,19 +646,35 @@ app.get('/api/config', (req, res) => {
     });
 });
 
-app.get('/api/status', (req, res) => {
-    const ai_enabled = !aiInitializationError && !!ai;
-    const email_enabled = !mailerSendInitializationError;
+app.get('/api/health', async (req, res) => {
+    let dbStatus;
+    if (dbInitializationError) {
+        dbStatus = { ok: false, message: `Database initialization failed: ${dbInitializationError}` };
+    } else if (pool) {
+        let client;
+        try {
+            client = await pool.connect();
+            await client.query('SELECT NOW()'); // Simple query to check liveness
+            dbStatus = { ok: true, message: 'Successfully connected to the database.' };
+        } catch (e) {
+            dbStatus = { ok: false, message: `Database connection failed: ${e.message}` };
+        } finally {
+            if (client) client.release();
+        }
+    } else {
+        dbStatus = { ok: false, message: 'Database is not configured (DATABASE_URL is not set).' };
+    }
 
     res.json({
-        db_enabled: !dbInitializationError,
-        stripe_enabled: !stripeInitializationError,
-        ai_enabled: ai_enabled,
-        email_enabled: email_enabled,
-        message: ai_enabled ? "Operational" : aiInitializationError,
-        message_ar: ai_enabled ? "فعّال" : "خدمات الذكاء الاصطناعي معطلة: تحقق من مفتاح الواجهة البرمجية (API Key).",
-        email_message: email_enabled ? "Operational" : mailerSendInitializationError,
-        email_message_ar: email_enabled ? "فعّال" : "خدمة البريد الإلكتروني معطلة: تحقق من إعدادات MailerSend.",
+        database: dbStatus,
+        ai_service: {
+            ok: !aiInitializationError,
+            message: aiInitializationError || 'AI service is operational.'
+        },
+        payment_service: {
+            ok: !stripeInitializationError,
+            message: stripeInitializationError || 'Payment service is operational.'
+        },
     });
 });
 
@@ -809,7 +824,7 @@ app.post('/api/ai/generate', authMiddleware, async (req, res) => {
         } else if (payload.type === 'generate-tweets') {
              const prompt = `Based on the topic "${payload.idea}", generate 3-5 engaging and distinct tweets. Each tweet should be concise, include relevant hashtags, and have a different angle (e.g., a question, a surprising fact, a call to action). Format the output clearly, separating each tweet.`;
               const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gem-2.5-flash',
                 contents: prompt,
               });
              aiResult = { text: response.text };
