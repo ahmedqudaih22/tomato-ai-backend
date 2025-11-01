@@ -200,8 +200,9 @@ const initializeDatabase = async () => {
         return;
     }
     console.log('Initializing database schema...');
-    const client = await pool.connect();
+    let client;
     try {
+        client = await pool.connect();
         // --- Start Schema Migration & Correction ---
         
         // Fix for old settings table schema that caused "column 'key' does not exist" error.
@@ -288,8 +289,9 @@ const initializeDatabase = async () => {
         console.error('Database initialization/migration failed:', err);
         // This is a critical error, the app might not function correctly
         dbInitializationError = `فشل في تهيئة/ترحيل مخطط قاعدة البيانات: ${err.message}`;
+        throw err; // Re-throw to be caught by startServer
     } finally {
-        client.release();
+        if (client) client.release();
     }
 };
 
@@ -907,7 +909,15 @@ app.get('/api/stats', authMiddleware, adminMiddleware, async (req, res) => {
 
 // --- Server Startup ---
 const startServer = async () => {
-    await initializeDatabase();
+    try {
+        await initializeDatabase();
+    } catch (error) {
+        console.error("CRITICAL: A fatal error occurred during database initialization, server will run in a degraded state.", error);
+        if (!dbInitializationError) {
+            dbInitializationError = `A critical error prevented database connection: ${error.message}`;
+        }
+    }
+
     app.listen(port, () => {
         console.log(`Server running on port ${port}`);
         if(dbInitializationError) console.error("SERVER IS RUNNING WITH DATABASE ERRORS.");
