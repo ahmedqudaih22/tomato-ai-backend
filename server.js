@@ -1,5 +1,3 @@
-
-
 // A full-stack backend for Tomato AI
 const express = require('express');
 const { Pool } = require('pg');
@@ -209,23 +207,52 @@ let currentSettings = null;
 
 // --- Helper Functions ---
 
+/**
+ * Checks if an item is a non-array object.
+ * @param item The item to check.
+ * @returns True if the item is an object, false otherwise.
+ */
+const isObject = (item) => {
+    return (item && typeof item === 'object' && !Array.isArray(item));
+};
+
+/**
+ * Deeply merges a source object into a target object, ensuring no default values are lost.
+ * @param defaults The default object structure.
+ * @param overrides The object with potential overrides from the database.
+ * @returns The safely merged object.
+ */
+const deepMerge = (defaults, overrides) => {
+  const merged = { ...defaults };
+  for (const key in overrides) {
+    if (overrides.hasOwnProperty(key)) {
+      if (isObject(overrides[key]) && isObject(merged[key])) {
+        merged[key] = deepMerge(merged[key], overrides[key]);
+      } else {
+        merged[key] = overrides[key];
+      }
+    }
+  }
+  return merged;
+};
+
 const fetchSettingsFromDB = async () => {
     if (!pool) return defaultSettings;
     try {
         const result = await pool.query('SELECT settings_json FROM settings WHERE id = 1');
-        if (result.rows.length > 0) {
-            // Deep merge to ensure nested default properties are not lost
+        if (result.rows.length > 0 && result.rows[0].settings_json) {
             const dbSettings = result.rows[0].settings_json;
-            const mergedCosts = { ...defaultSettings.costs, ...dbSettings.costs };
-            const mergedSettings = { ...defaultSettings, ...dbSettings, costs: mergedCosts };
+            // Deep merge to ensure defaults are kept for missing nested properties (like image URLs)
+            const mergedSettings = deepMerge(defaultSettings, dbSettings);
             return mergedSettings;
         } else {
-            await pool.query('INSERT INTO settings (id, settings_json) VALUES (1, $1)', [JSON.stringify(defaultSettings)]);
+            // No settings found or it's null, insert defaults
+            await pool.query('INSERT INTO settings (id, settings_json) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET settings_json = $1', [JSON.stringify(defaultSettings)]);
             return defaultSettings;
         }
     } catch (error) {
         console.error("Database error fetching settings:", error);
-        return defaultSettings;
+        return defaultSettings; // Fallback to defaults on error
     }
 };
 
@@ -233,6 +260,49 @@ const sanitizeUser = (user) => {
     if (!user) return null;
     const { password_hash, ...sanitized } = user;
     return sanitized;
+};
+
+const ensureAdminExists = async () => {
+    if (!pool) {
+        console.warn("Database not connected, skipping admin check.");
+        return;
+    }
+    const adminEmail = 'samy.qudaih95@gmail.com';
+    const adminUsername = 'samyqudaih';
+    const adminPassword = 'Sami12344';
+
+    try {
+        const client = await pool.connect();
+        try {
+            const res = await client.query('SELECT * FROM users WHERE email = $1', [adminEmail]);
+            
+            const salt = crypto.randomBytes(16).toString('hex');
+            const hash = crypto.pbkdf2Sync(adminPassword, salt, 1000, 64, 'sha512').toString('hex');
+            const passwordHash = `${salt}:${hash}`;
+
+            if (res.rows.length > 0) {
+                // Admin exists, update password and ensure admin status is true
+                await client.query(
+                    'UPDATE users SET password_hash = $1, is_admin = true, username = $2 WHERE email = $3',
+                    [passwordHash, adminUsername, adminEmail]
+                );
+                console.log(`Admin account for ${adminEmail} updated successfully.`);
+            } else {
+                // Admin does not exist, create it
+                const referralCode = crypto.randomBytes(4).toString('hex');
+                await client.query(
+                    `INSERT INTO users (username, email, password_hash, country, points, is_admin, referral_code, status) 
+                     VALUES ($1, $2, $3, 'SA', 9999, true, $4, 'active')`,
+                    [adminUsername, adminEmail, passwordHash, referralCode]
+                );
+                console.log(`Admin account for ${adminEmail} created successfully.`);
+            }
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error("Error ensuring admin user exists:", error);
+    }
 };
 
 // --- Middleware for Authentication ---
@@ -812,6 +882,7 @@ app.post('/api/admin/test-email', authenticate, requireAdmin, async (req, res) =
 
 // --- Server Startup ---
 const startServer = async () => {
+    await ensureAdminExists(); // Ensure admin user is configured correctly on startup
     currentSettings = await fetchSettingsFromDB();
     app.listen(port, () => {
         console.log(`Server running on port ${port}`);
