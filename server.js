@@ -149,588 +149,563 @@ const defaultSettings = {
             title_ar: "ماذا يقول المستخدمون عنا؟",
             title_en: "What Our Users Say",
             items: [
-                { id: 1, quote_ar: "أداة مذهلة! ساعدتني في إنشاء صور لحملتي التسويقية بسرعة لا تصدق. النتائج كانت أفضل مما توقعت.", quote_en: "Amazing tool! It helped me create images for my marketing campaign with incredible speed. The results were better than I expected.", name_ar: "سارة عبدالله", name_en: "Sara Abdullah", role_ar: "مديرة تسويق", role_en: "Marketing Manager", avatarUrl: "https://i.ibb.co/GvxB34T/avatar1.jpg" },
-                { id: 2, quote_ar: "خدمة تحويل النص إلى صوت هي الأفضل التي جربتها، خاصة باللهجة الخليجية. الصوت طبيعي جدًا.", quote_en: "The text-to-speech service is the best I've tried, especially the Gulf dialect. The voice is very natural.", name_ar: "محمد الغامدي", name_en: "Mohammed Al-Ghamdi", role_ar: "صانع محتوى", role_en: "Content Creator", avatarUrl: "https://i.ibb.co/yqgR2s7/avatar2.jpg" },
-                { id: 3, quote_ar: "كمصمم، أستخدم مولد الصور يوميًا للحصول على الإلهام. إنه يوفر عليّ ساعات من البحث.", quote_en: "As a designer, I use the image generator daily for inspiration. It saves me hours of searching.", name_ar: "خالد المصري", name_en: "Khaled El-Masry", role_ar: "مصمم جرافيك", role_en: "Graphic Designer", avatarUrl: "https://i.ibb.co/qD2v4T3/avatar3.jpg" },
-                { id: 4, quote_ar: "واجهة سهلة وبسيطة، ونظام النقاط واضح وعادل. أحببت التجربة وسأستمر في استخدامها.", quote_en: "Easy and simple interface, and the points system is clear and fair. I loved the experience and will continue to use it.", name_ar: "فاطمة علي", name_en: "Fatima Ali", role_ar: "مدونة", role_en: "Blogger", avatarUrl: "https://i.ibb.co/N1Xq3t3/avatar4.jpg" },
-                { id: 5, quote_ar: "أداة إعادة الصياغة ممتازة للطلاب. ساعدتني في تحسين كتاباتي الأكاديمية بشكل كبير.", quote_en: "The rewriting tool is excellent for students. It has significantly helped me improve my academic writing.", name_ar: "عمر الشريف", name_en: "Omar Sharif", role_ar: "طالب جامعي", role_en: "University Student", avatarUrl: "https://i.ibb.co/9h7r2Tf/avatar5.jpg" },
-                { id: 6, quote_ar: "كنت مترددًا في البداية، لكن جودة الصور التي تم إنشاؤها أبهرتني. خدمة عملاء سريعة ومتعاونة أيضًا.", quote_en: "I was hesitant at first, but the quality of the generated images amazed me. The customer service is also fast and helpful.", name_ar: "ليلى الخوري", name_en: "Layla El Khoury", role_ar: "مصورة فوتوغرافية", role_en: "Photographer", avatarUrl: "https://i.ibb.co/gDFtNmd/avatar6.jpg" },
-                { id: 7, quote_ar: "أفضل استثمار قمت به لعملي. يوفر الوقت والجهد ويقدم نتائج احترافية لا مثيل لها.", quote_en: "The best investment I've made for my business. It saves time, effort, and delivers unparalleled professional results.", name_ar: "يوسف منصور", name_en: "Youssef Mansour", role_ar: "رائد أعمال", role_en: "Entrepreneur", avatarUrl: "https://i.ibb.co/SNk3zS1/avatar7.jpg" },
-                { id: 8, quote_ar: "أدير متجرًا صغيرًا، وهذه الأداة هي منقذي لإنشاء منشورات وسائل التواصل الاجتماعي. مولد التغريدات عبقري!", quote_en: "I run a small shop, and this tool is my savior for creating social media posts. The tweet generator is genius!", name_ar: "نادية حسن", name_en: "Nadia Hassan", role_ar: "صاحبة متجر", role_en: "Shop Owner", avatarUrl: "https://i.ibb.co/8mr1f81/avatar8.jpg" },
-                { id: 9, quote_ar: "أستخدم ميزة تحويل النص إلى صوت لإنشاء مواد تعليمية لطلابي. اللهجات المختلفة تجعل المحتوى أكثر جاذبية.", quote_en: "I use the text-to-speech feature to create educational materials for my students. The different dialects make the content much more engaging.", name_ar: "أحمد إبراهيم", name_en: "Ahmed Ibrahim", role_ar: "مدرس", role_en: "Teacher", avatarUrl: "https://i.ibb.co/9vVzqB3/avatar9.jpg" },
-                { id: 10, quote_ar: "كمطور، أنا معجب جدًا بمدى سلاسة كل شيء. من الواضح أن هناك الكثير من العمل الجيد وراء هذا المشروع.", quote_en: "As a developer, I'm very impressed with how smoothly everything runs. It's clear a lot of good work went into this project.", name_ar: "زينب مراد", name_en: "Zainab Murad", role_ar: "مطور برامج", role_en: "Software Developer", avatarUrl: "https://i.ibb.co/J3BzkzM/avatar10.jpg" }
+                { id: 1, quote_ar: "أداة مذهلة! ساعدتني في إنشاء صور لحملتي التسويقية بسرعة لا تصدق. النتائج كانت أفضل مما توقعت.", quote_en: "Amazing tool! It helped me create images for my marketing campaign with incredible speed. The results were better than I expected.", name_ar: "سارة عبدالله", name_en: "Sara Abdullah", role_ar: "مديرة تسويق", role_en: "Marketing Manager", avatarUrl: "https://randomuser.me/api/portraits/women/11.jpg" },
+                { id: 2, quote_ar: "خاصية تحويل النص إلى صوت باللغة العربية رائعة. الأصوات طبيعية جدًا ومناسبة لمقاطع الفيديو الخاصة بي.", quote_en: "The text-to-speech feature in Arabic is fantastic. The voices are very natural and perfect for my videos.", name_ar: "أحمد المصري", name_en: "Ahmed Elmasry", role_ar: "صانع محتوى", role_en: "Content Creator", avatarUrl: "https://randomuser.me/api/portraits/men/22.jpg" }
             ]
         },
         faq: {
-            title_ar: "أسئلة شائعة",
+            title_ar: "الأسئلة الشائعة",
             title_en: "Frequently Asked Questions",
             items: [
-                { id: 1, q_ar: "كيف أحصل على النقاط؟", q_en: "How do I get points?", a_ar: "يمكنك شراء النقاط من المتجر، أو الحصول عليها مجانًا من خلال المكافأة اليومية ودعوة الأصدقاء.", a_en: "You can buy points from the store, or get them for free through the daily reward and by inviting friends." },
-                { id: 2, q_ar: "هل يمكنني استخدام الصور التي أنشئها لأغراض تجارية؟", q_en: "Can I use the images I create for commercial purposes?", a_ar: "نعم، جميع الصور التي تنشئها بدون علامة مائية هي ملكك ولك الحرية في استخدامها لأي غرض، بما في ذلك الأغراض التجارية.", a_en: "Yes, all images you create without a watermark are yours to use for any purpose, including commercial use." },
-                { id: 3, q_ar: "ما هي اللغات واللهجات المتاحة لتحويل النص إلى صوت؟", q_en: "What languages and dialects are available for text-to-speech?", a_ar: "نحن ندعم اللغة العربية الفصحى ومجموعة متنوعة من اللهجات العربية الشائعة مثل الخليجية والمصرية والشامية.", a_en: "We support Standard Arabic and a variety of common Arabic dialects such as Gulf, Egyptian, and Levantine." },
-                { id: 4, q_ar: "هل بياناتي آمنة؟", q_en: "Is my data secure?", a_ar: "نعم، نحن نأخذ خصوصيتك على محمل الجد. يتم تأمين جميع الاتصالات وتشفير بياناتك الحساسة. نحن لا نشارك بياناتك مع أي طرف ثالث.", a_en: "Yes, we take your privacy very seriously. All communications are secured and your sensitive data is encrypted. We do not share your data with any third parties." }
+                { id: 1, q_ar: "كيف أحصل على النقاط؟", q_en: "How do I get points?", a_ar: "يمكنك شراء النقاط مباشرة من المتجر، أو كسبها مجانًا من خلال المكافآت اليومية وبرنامج الإحالة.", a_en: "You can purchase points directly from the store, or earn them for free through daily rewards and the referral program." },
+                { id: 2, q_ar: "هل يمكنني استخدام الصور التي أنشئها لأغراض تجارية؟", q_en: "Can I use the images I create for commercial purposes?", a_ar: "نعم، جميع الصور التي تنشئها بدون علامة مائية هي ملكك ولك كامل الحق في استخدامها لأي غرض، بما في ذلك الأغراض التجارية.", a_en: "Yes, all images you generate without a watermark are yours and you have full rights to use them for any purpose, including commercial." }
             ]
         },
         finalCta: {
-            title_ar: "هل أنت مستعد للبدء؟",
+            title_ar: "جاهز لتبدأ؟",
             title_en: "Ready to Get Started?",
-            text_ar: "أنشئ حسابك المجاني اليوم وابدأ في تحويل أفكارك إلى حقيقة.",
-            text_en: "Create your free account today and start turning your ideas into reality.",
-            button_ar: "أنشئ حسابك الآن",
-            button_en: "Create Your Account Now"
+            text_ar: "سجل الآن وابدأ في تحويل أفكارك إلى حقيقة.",
+            text_en: "Sign up now and start turning your ideas into reality.",
+            button_ar: "إنشاء حساب مجاني",
+            button_en: "Create a Free Account"
         }
     },
     store: {
         packages: [
-            { id: 1, points: 100, price: 5 },
-            { id: 2, points: 250, price: 10 },
-            { id: 3, points: 700, price: 25 },
-            { id: 4, points: 1500, price: 50 },
-        ]
+            { id: 1, points: 100, price: 5, stripePriceId: 'price_1PMEp5RxX3xWz2gL6k0F4zQf' },
+            { id: 2, points: 250, price: 10, stripePriceId: 'price_1PMEqDRxX3xWz2gLwZ6yG3Hh' },
+            { id: 3, points: 600, price: 20, stripePriceId: 'price_1PMEqlRxX3xWz2gL9c1c8D1J' },
+            { id: 4, points: 2000, price: 50, stripePriceId: 'price_1PMErFRxX3xWz2gLo2H2O3p4' }
+        ],
+        subscriptions: []
     },
     announcement: {
         enabled: false,
-        imageUrl: "",
-        contentAr: "<strong>عرض خاص!</strong> احصل على خصم 50% على جميع باقات النقاط لمدة 48 ساعة فقط!",
-        contentEn: "<strong>Special Offer!</strong> Get a 50% discount on all point packages for 48 hours only!",
+        imageUrl: "https://example.com/image.png",
+        contentEn: "<h3>Big News!</h3><p>We've just launched a new feature. Check it out now!</p>",
+        contentAr: "<h3>خبر عاجل!</h3><p>لقد أطلقنا ميزة جديدة. تفقدها الآن!</p>",
         textColor: "#000000",
         fontSize: 16
     },
-     maintenance: {
+    maintenance: {
         enabled: false,
-        message_en: "We are currently performing scheduled maintenance. We should be back online shortly. Thank you for your patience!",
-        message_ar: "نقوم حاليًا بإجراء صيانة مجدولة. سنعود للعمل قريبًا. شكرًا لصبركم!"
+        message_en: "We are currently performing scheduled maintenance. We should be back online shortly. Thank you for your patience.",
+        message_ar: "نقوم حاليًا بإجراء صيانة مجدولة. سنعود للعمل قريبًا. شكرًا لصبركم."
     }
 };
 
-let currentSettings = null;
+const initializeDatabase = async () => {
+    if (!pool) {
+        console.warn('Database initialization skipped: pool is not available.');
+        return;
+    }
+    console.log('Initializing database schema...');
+    const client = await pool.connect();
+    try {
+        // Use CREATE TABLE IF NOT EXISTS to prevent errors on restart
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(50) UNIQUE NOT NULL,
+                email VARCHAR(100) UNIQUE NOT NULL,
+                password_hash VARCHAR(255) NOT NULL,
+                points INTEGER DEFAULT 10,
+                country VARCHAR(5),
+                is_admin BOOLEAN DEFAULT FALSE,
+                status VARCHAR(20) DEFAULT 'active',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                last_login TIMESTAMP WITH TIME ZONE,
+                referral_code VARCHAR(20) UNIQUE,
+                referrer_id INTEGER,
+                referrals INTEGER DEFAULT 0,
+                last_daily_claim TIMESTAMP WITH TIME ZONE
+            );
+        `);
+
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS settings (
+                key VARCHAR(255) PRIMARY KEY,
+                value JSONB
+            );
+        `);
+        
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS history (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                type VARCHAR(50),
+                prompt TEXT,
+                result_url TEXT,
+                cost INTEGER,
+                date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS operations (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) UNIQUE NOT NULL,
+                status VARCHAR(50) DEFAULT 'pending',
+                result JSONB,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // Check if default settings exist, if not, insert them
+        const res = await client.query("SELECT * FROM settings WHERE key = 'app_settings'");
+        if (res.rows.length === 0) {
+            console.log('No settings found in DB, inserting defaults...');
+            await client.query("INSERT INTO settings (key, value) VALUES ($1, $2)", ['app_settings', JSON.stringify(defaultSettings)]);
+        } else {
+             console.log('Settings already exist in DB.');
+        }
+
+        console.log('Database schema initialization complete.');
+    } catch (err) {
+        console.error('Database initialization failed:', err);
+        // This is a critical error, the app might not function correctly
+        dbInitializationError = `فشل في تهيئة مخطط قاعدة البيانات: ${err.message}`;
+    } finally {
+        client.release();
+    }
+};
+
 
 // --- Helper Functions ---
-
-/**
- * Checks if an item is a non-array object.
- * @param item The item to check.
- * @returns True if the item is an object, false otherwise.
- */
-const isObject = (item) => {
-    return (item && typeof item === 'object' && !Array.isArray(item));
+const createToken = (userId) => {
+    // This is a placeholder for a real JWT implementation
+    return `token-for-user-${userId}-${Date.now()}`;
 };
 
-/**
- * Deeply merges a source object into a target object, ensuring no default values are lost.
- * @param defaults The default object structure.
- * @param overrides The object with potential overrides from the database.
- * @returns The safely merged object.
- */
-const deepMerge = (defaults, overrides) => {
-  const merged = { ...defaults };
-  for (const key in overrides) {
-    if (overrides.hasOwnProperty(key)) {
-      if (isObject(overrides[key]) && isObject(merged[key])) {
-        merged[key] = deepMerge(merged[key], overrides[key]);
-      } else {
-        merged[key] = overrides[key];
-      }
-    }
-  }
-  return merged;
-};
+const getUserIdFromToken = async (token) => {
+    // Placeholder for JWT verification
+    if (token && token.startsWith('Bearer ')) {
+        token = token.slice(7, token.length);
+        const parts = token.split('-');
+        const userId = parseInt(parts[3], 10);
 
-const fetchSettingsFromDB = async () => {
-    if (!pool) return defaultSettings;
-    try {
-        const result = await pool.query('SELECT settings_json FROM settings WHERE id = 1');
-        if (result.rows.length > 0 && result.rows[0].settings_json) {
-            const dbSettings = result.rows[0].settings_json;
-            // Deep merge to ensure defaults are kept for missing nested properties (like image URLs)
-            const mergedSettings = deepMerge(defaultSettings, dbSettings);
-            return mergedSettings;
-        } else {
-            // No settings found or it's null, insert defaults
-            await pool.query('INSERT INTO settings (id, settings_json) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET settings_json = $1', [JSON.stringify(defaultSettings)]);
-            return defaultSettings;
+        if (!isNaN(userId) && pool) {
+            const client = await pool.connect();
+            try {
+                const res = await client.query('SELECT status FROM users WHERE id = $1', [userId]);
+                if (res.rows.length > 0 && res.rows[0].status === 'active') {
+                    return userId;
+                }
+            } finally {
+                client.release();
+            }
         }
-    } catch (error) {
-        console.error("Database error fetching settings:", error);
-        return defaultSettings; // Fallback to defaults on error
     }
+    return null;
 };
 
-const sanitizeUser = (user) => {
-    if (!user) return null;
-    const { password_hash, ...sanitized } = user;
-    return sanitized;
+const getSettings = async (client) => {
+     try {
+        const res = await client.query("SELECT value FROM settings WHERE key = 'app_settings'");
+        if (res.rows.length > 0) {
+            return res.rows[0].value;
+        }
+     } catch (e) {
+         console.error("Error fetching settings, returning default. Error:", e);
+         return defaultSettings;
+     }
+    return defaultSettings; // Fallback
 };
 
-// --- Middleware for Authentication ---
-
-const authenticate = async (req, res, next) => {
-    if (!pool) return res.status(503).json({ message: 'Database service is not available.' });
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (token == null) return res.sendStatus(401);
-
-    try {
-        const result = await pool.query('SELECT * FROM users WHERE auth_token = $1', [token]);
-        if (result.rows.length === 0) return res.sendStatus(403);
-        req.user = result.rows[0];
-        next();
-    } catch (error) {
-        res.status(500).json({ message: 'Database error during authentication' });
+const authMiddleware = async (req, res, next) => {
+    const token = req.headers.authorization;
+    if (!token) {
+        return res.status(401).json({ message: 'No token provided' });
     }
-};
-
-const requireAdmin = (req, res, next) => {
-    if (!req.user || !req.user.is_admin) {
-        return res.status(403).json({ message: 'Administrator access required.' });
+    const userId = await getUserIdFromToken(token);
+    if (!userId) {
+        return res.status(401).json({ message: 'Invalid token' });
     }
+    req.userId = userId;
     next();
 };
 
-const maintenanceCheck = (req, res, next) => {
-    if (currentSettings && currentSettings.maintenance && currentSettings.maintenance.enabled) {
-        if (!pool) {
-             return res.status(503).json({ 
-                message: 'Service Unavailable - Maintenance Mode',
-                settings: { maintenance: currentSettings.maintenance, theme: currentSettings.theme }
-            });
+const adminMiddleware = async (req, res, next) => {
+    if (!pool) return res.status(503).json({ message: "Database service unavailable" });
+    const client = await pool.connect();
+    try {
+        const userRes = await client.query('SELECT is_admin FROM users WHERE id = $1', [req.userId]);
+        if (userRes.rows.length === 0 || !userRes.rows[0].is_admin) {
+            return res.status(403).json({ message: 'Admin access required' });
         }
-        const authHeader = req.headers['authorization'];
-        const token = authHeader && authHeader.split(' ')[1];
-        if (token) {
-            pool.query('SELECT is_admin FROM users WHERE auth_token = $1', [token])
-                .then(result => {
-                    if (result.rows.length > 0 && result.rows[0].is_admin) {
-                        return next();
-                    } else {
-                        return res.status(503).json({ 
-                            message: 'Service Unavailable - Maintenance Mode',
-                            settings: { maintenance: currentSettings.maintenance, theme: currentSettings.theme }
-                        });
-                    }
-                })
-                .catch(() => {
-                    return res.status(503).json({ 
-                        message: 'Service Unavailable - Maintenance Mode',
-                        settings: { maintenance: currentSettings.maintenance, theme: currentSettings.theme }
-                    });
-                });
-        } else {
-            return res.status(503).json({ 
-                message: 'Service Unavailable - Maintenance Mode',
-                settings: { maintenance: currentSettings.maintenance, theme: currentSettings.theme }
-            });
-        }
-    } else {
         next();
+    } catch (err) {
+        res.status(500).json({ message: 'Error checking admin status' });
+    } finally {
+        client.release();
     }
 };
 
-// --- API Routes ---
+// --- API Endpoints ---
 
-app.get('/api/config', (req, res) => {
-    res.json({
-        stripe_pk: process.env.STRIPE_PUBLISHABLE_KEY || null,
-    });
-});
+// Registration
+app.post('/api/register', async (req, res) => {
+    if (!pool) return res.status(503).json({ message: "Database service unavailable for registration" });
 
-app.get('/api/settings', maintenanceCheck, (req, res) => {
-    if (currentSettings) {
-        res.json(currentSettings);
-    } else {
-        res.status(500).json({ message: "Settings not loaded" });
-    }
-});
-
-app.get('/api/status', maintenanceCheck, (req, res) => {
-    res.json({
-        ai_enabled: !!ai,
-        message: aiInitializationError || "AI services are fully operational.",
-        message_ar: aiInitializationError || "خدمات الذكاء الاصطناعي تعمل بكامل طاقتها.",
-        email_enabled: !!(MAILERSEND_API_TOKEN && MAILERSEND_SENDER_EMAIL),
-        email_message: mailerSendInitializationError || "Email services are fully operational.",
-        email_message_ar: mailerSendInitializationError || "خدمات البريد الإلكتروني تعمل بكامل طاقتها."
-    });
-});
-
-// Auth Routes
-app.post('/api/register', maintenanceCheck, async (req, res) => {
-    if (!pool) return res.status(503).json({ message: 'Database service is not available.' });
     const { username, email, password, country, referralCode } = req.body;
     
-    if (!username || !email || !password || !country) {
-        return res.status(400).json({ message: 'All fields are required.' });
+    if (!username) {
+        return res.status(400).json({ message: 'Username is required.' });
     }
-
+    
+    const client = await pool.connect();
     try {
-        const existingUser = await pool.query('SELECT * FROM users WHERE email = $1 OR username = $2', [email.toLowerCase(), username.toLowerCase()]);
-        if (existingUser.rows.length > 0) {
-            const isEmail = existingUser.rows.find(u => u.email === email.toLowerCase());
-            return res.status(409).json({ message: isEmail ? 'Email already exists.' : 'Username already exists.' });
+        await client.query('BEGIN');
+
+        // Check if email or username exists
+        const emailExists = await client.query('SELECT id FROM users WHERE email = $1', [email]);
+        if (emailExists.rows.length > 0) {
+            return res.status(409).json({ message: 'Email already exists.' });
+        }
+        const usernameExists = await client.query('SELECT id FROM users WHERE username = $1', [username]);
+        if (usernameExists.rows.length > 0) {
+            return res.status(409).json({ message: 'Username already exists.' });
         }
         
-        const salt = crypto.randomBytes(16).toString('hex');
-        const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
-        const passwordHash = `${salt}:${hash}`;
-        
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
+        let initialPoints = 10;
+        let referrerId = null;
 
-            // Check if there are any users in the database to determine if this is the first user.
-            const userCountResult = await client.query('SELECT COUNT(*) FROM users');
-            const isFirstUser = parseInt(userCountResult.rows[0].count, 10) === 0;
+        // Handle referral logic
+        if (referralCode) {
+            const referrerResult = await client.query('SELECT id, points, referrals FROM users WHERE referral_code = $1', [referralCode]);
+            if (referrerResult.rows.length > 0) {
+                const referrer = referrerResult.rows[0];
+                referrerId = referrer.id;
+                const referralBonus = (await getSettings(client)).costs.referralBonus || 50;
+                
+                await client.query('UPDATE users SET points = points + $1, referrals = COALESCE(referrals, 0) + 1 WHERE id = $2', [referralBonus, referrerId]);
 
-            let referrerId = null;
-            const bonusPoints = (currentSettings.costs && currentSettings.costs.referralBonus) || 50;
-            if (referralCode) {
-                const referrerResult = await client.query('SELECT id FROM users WHERE referral_code = $1', [referralCode]);
-                if (referrerResult.rows.length > 0) {
-                    referrerId = referrerResult.rows[0].id;
-                }
+                initialPoints += referralBonus;
             }
-            
-            // If it's the first user, make them admin and give them points. Otherwise, apply referral logic.
-            const isAdmin = isFirstUser;
-            const initialPoints = isFirstUser ? 9999 : (referrerId ? bonusPoints : 0);
-            
-            const newReferralCode = crypto.randomBytes(4).toString('hex');
-            const newUserQuery = `
-                INSERT INTO users (username, email, password_hash, country, points, is_admin, referral_code, referrer_id, status) 
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active') 
-                RETURNING *`;
-
-            const newUserResult = await client.query(newUserQuery, [
-                username, email.toLowerCase(), passwordHash, country, initialPoints, isAdmin, newReferralCode, referrerId
-            ]);
-            const newUser = newUserResult.rows[0];
-
-            if (referrerId && !isFirstUser) {
-                await client.query('UPDATE users SET points = points + $1, referrals = referrals + 1 WHERE id = $2', [bonusPoints, referrerId]);
-            }
-            
-            const token = crypto.randomBytes(32).toString('hex');
-            await client.query('UPDATE users SET auth_token = $1 WHERE id = $2', [token, newUser.id]);
-
-            await client.query('COMMIT');
-            
-            const userForResponse = { ...newUser, auth_token: token };
-            res.status(201).json({ token, user: sanitizeUser(userForResponse) });
-
-        } catch (e) {
-            await client.query('ROLLBACK');
-            throw e;
-        } finally {
-            client.release();
         }
 
+
+        const hashedPassword = crypto.createHash('sha256').update(password).digest('hex');
+        const newReferralCode = crypto.randomBytes(8).toString('hex');
+        
+        // Determine if this user should be an admin (first registered user)
+        const userCountResult = await client.query('SELECT COUNT(*) FROM users');
+        const isAdmin = parseInt(userCountResult.rows[0].count, 10) === 0;
+        
+        if(isAdmin) {
+             initialPoints = 10000; // Give admin a lot of points
+        }
+        
+        // Insert new user
+        const insertUserQuery = 'INSERT INTO users (username, email, password_hash, country, is_admin, points, referral_code, referrer_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *';
+        const insertUserValues = [username, email, hashedPassword, country, isAdmin, initialPoints, newReferralCode, referrerId];
+        const newUserResult = await client.query(insertUserQuery, insertUserValues);
+        const newUser = newUserResult.rows[0];
+
+        await client.query('COMMIT');
+        
+        delete newUser.password_hash;
+        const token = createToken(newUser.id);
+        res.status(201).json({ user: newUser, token });
+        
     } catch (error) {
-        console.error("Registration error:", error.message);
-        res.status(500).json({ message: 'An internal server error occurred during registration.' });
+        await client.query('ROLLBACK');
+        console.error('Registration error:', error);
+        res.status(500).json({ message: 'An internal server error occurred during registration' });
+    } finally {
+        client.release();
     }
 });
 
-app.post('/api/login', maintenanceCheck, async (req, res) => {
-    if (!pool) return res.status(503).json({ message: 'Database service is not available.' });
-    const { identifier, password } = req.body;
+// Login
+app.post('/api/login', async (req, res) => {
+    if (!pool) return res.status(503).json({ message: "Database service unavailable" });
 
+    const { identifier, password } = req.body; // identifier can be email or username
+    const hashedPassword = crypto.createHash('sha256').update(password).digest('hex');
+
+    const client = await pool.connect();
     try {
-        // Step 1: Find user by email or username, regardless of status
-        const result = await pool.query('SELECT * FROM users WHERE email = $1 OR username = $1', [identifier.toLowerCase()]);
+        const query = 'SELECT * FROM users WHERE (email = $1 OR username = $1) AND status = \'active\'';
+        const result = await client.query(query, [identifier]);
 
         if (result.rows.length === 0) {
             return res.status(404).json({ message: 'Account not found.' });
         }
 
         const user = result.rows[0];
-        
-        // Safety check for password hash format
-        if (!user.password_hash || !user.password_hash.includes(':')) {
-            console.error(`Invalid password hash format for user: ${user.id}`);
-            return res.status(500).json({ message: 'An internal server error occurred.' });
-        }
-
-        // Step 2: Verify password
-        const [salt, storedHash] = user.password_hash.split(':');
-        const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
-
-        if (hash !== storedHash) {
+        if (user.password_hash !== hashedPassword) {
             return res.status(401).json({ message: 'Incorrect password.' });
         }
+        
+        // Update last login timestamp
+        await client.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [user.id]);
 
-        // Step 3: Check status, but bypass for admins
-        if (user.status === 'banned' && !user.is_admin) {
-            return res.status(403).json({ message: 'This account has been banned.' });
-        }
-        
-        // Step 4: Login success - generate token and send response
-        const token = crypto.randomBytes(32).toString('hex');
-        await pool.query('UPDATE users SET auth_token = $1, last_login = NOW() WHERE id = $2', [token, user.id]);
-        
-        const updatedUser = { ...user, auth_token: token };
-        res.json({ token, user: sanitizeUser(updatedUser) });
+        delete user.password_hash;
+        const token = createToken(user.id);
+        res.json({ user, token });
 
     } catch (error) {
-        console.error("Login error:", error.message);
-        res.status(500).json({ message: 'An internal server error occurred.' });
+        console.error('Login error:', error);
+        res.status(500).json({ message: 'An internal server error occurred' });
+    } finally {
+        client.release();
     }
 });
 
-
-app.get('/api/users/me', authenticate, (req, res) => {
-    res.json({ user: sanitizeUser(req.user) });
+// Get current user
+app.get('/api/users/me', authMiddleware, async (req, res) => {
+    if (!pool) return res.status(503).json({ message: "Database service unavailable" });
+    const client = await pool.connect();
+    try {
+        const result = await client.query('SELECT id, username, email, points, country, is_admin, last_daily_claim, referral_code, referrals FROM users WHERE id = $1', [req.userId]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        res.json({ user: result.rows[0] });
+    } catch (error) {
+        console.error('Get user error:', error);
+        res.status(500).json({ message: 'An internal server error occurred' });
+    } finally {
+        client.release();
+    }
 });
 
-app.put('/api/users/me', authenticate, async (req, res) => {
+// Update current user profile
+app.put('/api/users/me', authMiddleware, async (req, res) => {
+    if (!pool) return res.status(503).json({ message: "Database service unavailable" });
     const { email, password } = req.body;
-    const userId = req.user.id;
     
-    let query = 'UPDATE users SET email = $1';
-    const values = [email, userId];
-    
+    let query, values;
     if (password) {
-        const salt = crypto.randomBytes(16).toString('hex');
-        const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
-        const passwordHash = `${salt}:${hash}`;
-        query += ', password_hash = $3 WHERE id = $2 RETURNING *';
-        values.splice(2, 0, passwordHash);
+        const hashedPassword = crypto.createHash('sha256').update(password).digest('hex');
+        query = 'UPDATE users SET email = $1, password_hash = $2 WHERE id = $3 RETURNING id, username, email, points, country, is_admin';
+        values = [email, hashedPassword, req.userId];
     } else {
-        query += ' WHERE id = $2 RETURNING *';
-    }
-
-    try {
-        const result = await pool.query(query, values);
-        res.json({ user: sanitizeUser(result.rows[0]) });
-    } catch (error) {
-        console.error("Profile update error:", error);
-        res.status(500).json({ message: "Failed to update profile." });
-    }
-});
-
-
-// History Routes
-app.get('/api/history', authenticate, async (req, res) => {
-    try {
-        const result = await pool.query('SELECT * FROM history WHERE user_id = $1 ORDER BY date DESC LIMIT 50', [req.user.id]);
-        res.json({ history: result.rows });
-    } catch (error) {
-        res.status(500).json({ message: 'Failed to fetch history.' });
-    }
-});
-
-app.post('/api/history', authenticate, async (req, res) => {
-    const { type, prompt, resultUrl, cost } = req.body;
-    try {
-        await pool.query('INSERT INTO history (user_id, type, prompt, result_url, cost) VALUES ($1, $2, $3, $4, $5)', [req.user.id, type, prompt, resultUrl, cost]);
-        res.sendStatus(201);
-    } catch (error) {
-        res.status(500).json({ message: 'Failed to save history item.' });
-    }
-});
-
-// Points & Rewards Routes
-app.post('/api/claim-daily-reward', authenticate, async (req, res) => {
-    const userId = req.user.id;
-    const lastClaim = req.user.last_daily_claim ? new Date(req.user.last_daily_claim).getTime() : 0;
-    const now = new Date().getTime();
-    const twentyFourHours = 24 * 60 * 60 * 1000;
-
-    if (now - lastClaim < twentyFourHours) {
-        return res.status(429).json({ message: 'You have already claimed your daily reward.' });
+        query = 'UPDATE users SET email = $1 WHERE id = $2 RETURNING id, username, email, points, country, is_admin';
+        values = [email, req.userId];
     }
     
+    const client = await pool.connect();
     try {
-        const rewardPoints = (currentSettings.costs && currentSettings.costs.dailyRewardPoints) || 10;
-        const result = await pool.query(
-            'UPDATE users SET points = points + $1, last_daily_claim = NOW() WHERE id = $2 RETURNING *',
-            [rewardPoints, userId]
+        const result = await client.query(query, values);
+        res.json({ user: result.rows[0] });
+    } catch (error) {
+        console.error('Update user error:', error);
+        if (error.code === '23505') { // Unique constraint violation
+             return res.status(409).json({ message: 'Email is already in use by another account.' });
+        }
+        res.status(500).json({ message: 'An internal server error occurred' });
+    } finally {
+        client.release();
+    }
+});
+
+// Daily Reward
+app.post('/api/claim-daily-reward', authMiddleware, async (req, res) => {
+    if (!pool) return res.status(503).json({ message: "Database service unavailable" });
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        
+        const userRes = await client.query('SELECT last_daily_claim FROM users WHERE id = $1', [req.userId]);
+        const lastClaim = userRes.rows[0].last_daily_claim;
+        const now = new Date();
+
+        if (lastClaim && (now.getTime() - new Date(lastClaim).getTime()) < 24 * 60 * 60 * 1000) {
+            return res.status(429).json({ message: 'You have already claimed your daily reward in the last 24 hours.' });
+        }
+        
+        const settings = await getSettings(client);
+        const rewardPoints = settings.costs.dailyRewardPoints;
+
+        const updateRes = await client.query(
+            'UPDATE users SET points = points + $1, last_daily_claim = $2 WHERE id = $3 RETURNING id, username, email, points, country, is_admin, last_daily_claim, referral_code, referrals', 
+            [rewardPoints, now, req.userId]
         );
-        res.json({ user: sanitizeUser(result.rows[0]) });
+        
+        await client.query('COMMIT');
+        res.json({ user: updateRes.rows[0], message: `You claimed ${rewardPoints} points!` });
+
     } catch (error) {
-        res.status(500).json({ message: 'Failed to claim reward.' });
+        await client.query('ROLLBACK');
+        console.error("Daily reward error:", error);
+        res.status(500).json({ message: "An error occurred while claiming the reward." });
+    } finally {
+        client.release();
     }
 });
 
-// --- AI Generation Proxy ---
-app.post('/api/ai/generate', authenticate, async (req, res) => {
-    if (!ai) {
-        return res.status(503).json({ message: aiInitializationError });
-    }
 
-    const { payload } = req.body;
-    const user = req.user;
-    
-    let cost = 0;
+// Get operation history
+app.get('/api/history', authMiddleware, async (req, res) => {
+     if (!pool) return res.status(503).json({ message: "Database service unavailable" });
+     const client = await pool.connect();
+     try {
+        const result = await client.query('SELECT * FROM history WHERE user_id = $1 ORDER BY date DESC', [req.userId]);
+        res.json({ history: result.rows });
+     } catch (error) {
+        res.status(500).json({ message: 'Failed to fetch history' });
+     } finally {
+        client.release();
+     }
+});
+
+// Add to history
+app.post('/api/history', authMiddleware, async (req, res) => {
+    if (!pool) return res.status(503).json({ message: "Database service unavailable" });
+    const { type, prompt, resultUrl, cost } = req.body;
+    const client = await pool.connect();
     try {
-        switch (payload.type) {
-            case 'generateImages':
-                cost = req.body.removeWatermark ? (currentSettings.costs.imageCreate_noWatermark ?? 15) : (currentSettings.costs.imageCreate ?? 5);
-                break;
-            case 'generateContent':
-                if (payload.model === 'gemini-2.5-flash-image') {
-                    cost = req.body.removeWatermark ? (currentSettings.costs.imageEdit_noWatermark ?? 8) : (currentSettings.costs.imageEdit ?? 2);
-                } else if (payload.model === 'gemini-2.5-flash-preview-tts') {
-                    const textLength = payload.contents[0]?.parts[0]?.text?.length || 0;
-                    cost = Math.ceil(textLength / 100) * (currentSettings.costs.textToSpeech ?? 1);
-                }
-                break;
-            case 'rewrite':
-                 cost = currentSettings.costs.contentRewrite ?? 1;
-                 break;
-            case 'generate-tweets':
-                 cost = currentSettings.costs.tweetGenerator ?? 1;
-                 break;
-        }
-    } catch (e) {
-        return res.status(400).json({ message: 'Invalid AI operation type or model for cost calculation.' });
+        await client.query(
+            'INSERT INTO history (user_id, type, prompt, result_url, cost) VALUES ($1, $2, $3, $4, $5)',
+            [req.userId, type, prompt, resultUrl, cost]
+        );
+        res.status(201).json({ message: 'History saved' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to save history' });
+    } finally {
+        client.release();
     }
+});
 
-
-    if (cost > 0 && user.points < cost) {
-        return res.status(402).json({ message: 'Insufficient points.' });
+// Get public settings
+app.get('/api/settings', async (req, res) => {
+    if (!pool) {
+        return res.status(503).json({ 
+            message: "Database service unavailable",
+            settings: defaultSettings, // Send default settings so the frontend can at least render
+        });
     }
-
+    const client = await pool.connect();
     try {
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
-
-            const updatedUserResult = await client.query(
-                'UPDATE users SET points = points - $1 WHERE id = $2 RETURNING *',
-                [cost, user.id]
-            );
-            const updatedUser = sanitizeUser(updatedUserResult.rows[0]);
-            
-            await client.query(
-                'INSERT INTO operations (user_id, type, cost) VALUES ($1, $2, $3)',
-                [user.id, payload.type, cost]
-            );
-
-            // Fix: Destructure `payload` to remove the internal `type` property before sending to the Gemini API.
-            const { type, ...apiPayload } = payload;
-            let result;
-            if (type === 'generateImages') {
-                const response = await ai.models.generateImages(apiPayload);
-                const base64Image = response.generatedImages[0].image.imageBytes;
-                result = { dataUrl: `data:image/png;base64,${base64Image}` };
-            } else if (type === 'generateContent') {
-                const response = await ai.models.generateContent(apiPayload);
-                if (apiPayload.model === 'gemini-2.5-flash-image') {
-                    const part = response.candidates[0].content.parts.find(p => p.inlineData);
-                    result = { dataUrl: `data:image/png;base64,${part.inlineData.data}` };
-                } else if (apiPayload.model === 'gemini-2.5-flash-preview-tts') {
-                    const part = response.candidates[0].content.parts.find(p => p.inlineData);
-                    result = { base64Audio: part.inlineData.data };
-                }
-            } else if (type === 'rewrite') {
-                 const styleInstruction = {
-                    professional: 'Rewrite the following text in a professional and formal tone.',
-                    simplify: 'Rewrite the following text to make it simpler and easier to understand.',
-                    summarize: 'Summarize the key points of the following text concisely.',
-                    expand: 'Expand on the following text, adding more detail and explanation.',
-                    points: 'Convert the main ideas of the following text into a bulleted list.'
-                };
-                const prompt = `${styleInstruction[payload.style] || 'Rewrite the following text:'}\n\n---\n\n${payload.text}`;
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: prompt,
-                });
-                result = { text: response.text };
-
-            } else if (type === 'generate-tweets') {
-                const prompt = `Generate 3-5 engaging and creative tweets based on the following topic or idea. Use relevant hashtags. The tweets should be ready to post.\n\nTopic: "${payload.idea}"`;
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: prompt,
-                });
-                result = { text: response.text };
+        const settings = await getSettings(client);
+        
+        const token = req.headers.authorization;
+        const userId = await getUserIdFromToken(token);
+        let userIsAdmin = false;
+        if (userId) {
+            const userRes = await client.query('SELECT is_admin FROM users WHERE id = $1', [userId]);
+            if (userRes.rows.length > 0) {
+                userIsAdmin = userRes.rows[0].is_admin;
             }
-
-            await client.query('COMMIT');
-            res.json({ result, user: updatedUser });
-
-        } catch (e) {
-            await client.query('ROLLBACK');
-            throw e; 
-        } finally {
-            client.release();
         }
+
+        if (settings.maintenance?.enabled && !userIsAdmin) {
+            return res.status(503).json({
+                message: settings.maintenance.message_en,
+                settings: { 
+                    theme: settings.theme,
+                    maintenance: settings.maintenance
+                }
+            });
+        }
+        
+        res.json(settings);
     } catch (error) {
-        console.error("AI Generation Error:", error);
-        res.status(500).json({ message: `AI generation failed: ${error.message}` });
+        console.error('Get settings error:', error);
+        res.status(500).json({ message: 'Could not fetch settings', settings: defaultSettings });
+    } finally {
+        client.release();
     }
 });
 
-app.post('/api/ai/remove-background', authenticate, async (req, res) => {
-    if (!ai) return res.status(503).json({ message: aiInitializationError });
-    
-    const { imagePart, textPart } = req.body;
+// Update settings (Admin only)
+app.post('/api/settings', authMiddleware, adminMiddleware, async (req, res) => {
+    const client = await pool.connect();
     try {
-        const payload = {
-            model: 'gemini-2.5-flash-image',
-            contents: { parts: [imagePart, textPart] },
-            config: { responseModalities: ['IMAGE'] },
-        };
-        const response = await ai.models.generateContent(payload);
-        const part = response.candidates[0].content.parts.find(p => p.inlineData);
-        const dataUrl = `data:image/png;base64,${part.inlineData.data}`;
-        res.json({ dataUrl });
-    } catch(error) {
-        console.error("BG Removal Error:", error);
-        res.status(500).json({ message: 'Background removal failed.' });
+        await client.query("UPDATE settings SET value = $1 WHERE key = 'app_settings'", [req.body.settings]);
+        res.json({ message: 'Settings updated successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to update settings' });
+    } finally {
+        client.release();
     }
 });
 
-// --- Stripe & Store Routes ---
-app.post('/api/create-checkout-session', authenticate, async (req, res) => {
-    if (!stripe) return res.status(503).json({ message: stripeInitializationError });
+// Get app config (for Stripe keys etc.)
+app.get('/api/config', (req, res) => {
+    res.json({
+        stripePublicKey: process.env.STRIPE_PUBLIC_KEY,
+    });
+});
 
+app.get('/api/status', (req, res) => {
+    const ai_enabled = !aiInitializationError && !!ai;
+    const email_enabled = !mailerSendInitializationError;
+
+    res.json({
+        db_enabled: !dbInitializationError,
+        stripe_enabled: !stripeInitializationError,
+        ai_enabled: ai_enabled,
+        email_enabled: email_enabled,
+        message: ai_enabled ? "Operational" : aiInitializationError,
+        message_ar: ai_enabled ? "فعّال" : "خدمات الذكاء الاصطناعي معطلة: تحقق من مفتاح الواجهة البرمجية (API Key).",
+        email_message: email_enabled ? "Operational" : mailerSendInitializationError,
+        email_message_ar: email_enabled ? "فعّال" : "خدمة البريد الإلكتروني معطلة: تحقق من إعدادات MailerSend.",
+    });
+});
+
+// Stripe Checkout
+app.post('/api/create-checkout-session', authMiddleware, async (req, res) => {
+    if (!stripe) {
+        return res.status(503).json({ message: "Payment service is not available." });
+    }
     const { packageId } = req.body;
-    const userId = req.user.id;
     
-    const pkg = currentSettings.store.packages.find(p => p.id === packageId);
-    if (!pkg) {
-        return res.status(404).json({ message: 'Package not found.' });
-    }
-
+    const client = await pool.connect();
     try {
+        const settings = await getSettings(client);
+        const pkg = settings.store.packages.find(p => p.id == packageId);
+
+        if (!pkg) {
+            return res.status(404).json({ message: 'Package not found' });
+        }
+        
+        const userRes = await client.query('SELECT email FROM users WHERE id = $1', [req.userId]);
+        const userEmail = userRes.rows[0].email;
+        
+        const successUrl = `${process.env.FRONTEND_URL || 'http://localhost:8080'}?payment_success=true`;
+        const cancelUrl = `${process.env.FRONTEND_URL || 'http://localhost:8080'}?payment_cancelled=true`;
+        
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
             line_items: [{
-                price_data: {
-                    currency: 'usd',
-                    product_data: {
-                        name: `${pkg.points.toLocaleString()} Points Package`,
-                        description: `Get ${pkg.points.toLocaleString()} points for Tomato AI`,
-                    },
-                    unit_amount: pkg.price * 100, // Price in cents
-                },
+                price: pkg.stripePriceId,
                 quantity: 1,
             }],
             mode: 'payment',
-            success_url: `${process.env.FRONTEND_URL}?payment_success=true`,
-            cancel_url: `${process.env.FRONTEND_URL}?payment_cancelled=true`,
+            success_url: successUrl,
+            cancel_url: cancelUrl,
+            customer_email: userEmail,
             metadata: {
-                userId: userId,
+                userId: req.userId,
+                packageId: pkg.id,
                 points: pkg.points
             }
         });
+
         res.json({ url: session.url });
+
     } catch (error) {
         console.error("Stripe session error:", error);
-        res.status(500).json({ message: 'Failed to create payment session.' });
+        res.status(500).json({ message: 'Failed to create checkout session' });
+    } finally {
+        client.release();
     }
 });
 
-app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req, res) => {
-    if (!stripe) return res.status(503).json({ message: stripeInitializationError });
+
+// Stripe Webhook
+app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
     const sig = req.headers['stripe-signature'];
     let event;
-
     try {
         event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
     } catch (err) {
-        console.error(`Webhook signature verification failed:`, err.message);
+        console.error(`Webhook signature verification failed.`, err.message);
         return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
@@ -738,208 +713,169 @@ app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req,
         const session = event.data.object;
         const { userId, points } = session.metadata;
 
-        if (!pool) {
-            console.error("CRITICAL: Stripe webhook received but database is not available. User points not awarded.");
-            return res.status(500).send('Internal Server Error: Database unavailable.');
+        if (userId && points) {
+            const client = await pool.connect();
+            try {
+                await client.query('UPDATE users SET points = points + $1 WHERE id = $2', [parseInt(points), parseInt(userId)]);
+                console.log(`User ${userId} was credited ${points} points.`);
+            } catch (err) {
+                console.error('Failed to update user points after payment:', err);
+            } finally {
+                client.release();
+            }
         }
-
-        try {
-            await pool.query('UPDATE users SET points = points + $1 WHERE id = $2', [Number(points), Number(userId)]);
-            console.log(`Successfully awarded ${points} to user ${userId}.`);
-        } catch (dbError) {
-            console.error(`Failed to update points for user ${userId}:`, dbError);
-        }
     }
-
-    res.json({received: true});
+    res.json({ received: true });
 });
 
 
-// --- Admin Routes ---
-
-app.get('/api/admin/users', authenticate, requireAdmin, async (req, res) => {
-    try {
-        const result = await pool.query('SELECT id, username, email, country, points, status, is_admin FROM users ORDER BY id ASC');
-        res.json({ users: result.rows });
-    } catch (error) {
-        res.status(500).json({ message: 'Failed to fetch users.' });
+// Proxy for AI Generation
+app.post('/api/ai/generate', authMiddleware, async (req, res) => {
+    if (!ai) {
+        return res.status(503).json({ message: "AI service is not available." });
     }
-});
-
-app.put('/api/admin/users/:id', authenticate, requireAdmin, async (req, res) => {
-    const { id } = req.params;
-    const { points, status } = req.body;
-
-    try {
-        // Prevent changing status of an admin
-        const targetUser = await pool.query('SELECT is_admin FROM users WHERE id = $1', [id]);
-        if (targetUser.rows.length > 0 && targetUser.rows[0].is_admin && req.user.id.toString() !== id) {
-             if (status && status !== 'active') { // Admins can't ban other admins for safety
-                return res.status(403).json({ message: 'Cannot change the status of an administrator account.' });
-             }
-        }
-
-        const result = await pool.query(
-            'UPDATE users SET points = points + $1, status = $2 WHERE id = $3 RETURNING *',
-            [points, status, id]
-        );
-        res.json({ user: sanitizeUser(result.rows[0]) });
-    } catch (error) {
-        res.status(500).json({ message: 'Failed to update user.' });
-    }
-});
-
-app.put('/api/admin/settings', authenticate, requireAdmin, async (req, res) => {
-    const newSettings = req.body;
-    try {
-        await pool.query('UPDATE settings SET settings_json = $1 WHERE id = 1', [newSettings]);
-        currentSettings = newSettings;
-        res.json({ message: 'Settings updated successfully.' });
-    } catch (error) {
-        res.status(500).json({ message: 'Failed to save settings.' });
-    }
-});
-
-app.get('/api/stats', authenticate, requireAdmin, async (req, res) => {
-    try {
-        const usersCount = await pool.query('SELECT COUNT(*) FROM users');
-        const operationsCount = await pool.query('SELECT COUNT(*) FROM operations');
-        const referralsCount = await pool.query('SELECT SUM(referrals) FROM users');
-
-        res.json({
-            users: parseInt(usersCount.rows[0].count) || 0,
-            operations: parseInt(operationsCount.rows[0].count) || 0,
-            referrals: parseInt(referralsCount.rows[0].sum) || 0,
-            visitors: parseInt(usersCount.rows[0].count) || 0, // Approximating visitors with user count
-        });
-    } catch (error) {
-        console.error("Stats Error:", error);
-        res.status(500).json({ message: 'Failed to get statistics.' });
-    }
-});
-
-app.post('/api/admin/test-email', authenticate, requireAdmin, async (req, res) => {
-    if (!MAILERSEND_API_TOKEN || !MAILERSEND_SENDER_EMAIL) {
-        return res.status(503).json({ message: mailerSendInitializationError });
-    }
-    const { testEmail } = req.body;
     
-    try {
-        const response = await fetch('https://api.mailersend.com/v1/email', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${MAILERSEND_API_TOKEN}`,
-            },
-            body: JSON.stringify({
-                from: { email: MAILERSEND_SENDER_EMAIL, name: 'Tomato AI Test' },
-                to: [{ email: testEmail }],
-                subject: 'Tomato AI - Test Email',
-                text: 'This is a test email from your Tomato AI application. If you received this, your email configuration is working!',
-                html: '<p>This is a test email from your Tomato AI application. If you received this, your email configuration is working!</p>',
-            }),
-        });
+    const { payload, removeWatermark } = req.body;
+    let cost = 0;
+    const client = await pool.connect();
 
-        if (!response.ok) {
-            const errorBody = await response.json().catch(() => ({ message: `MailerSend API returned status ${response.status}` }));
-            throw { message: 'Failed to send test email via MailerSend.', details: errorBody };
+    try {
+        await client.query('BEGIN');
+        const settings = await getSettings(client);
+        
+        if(payload.type === 'generateImages') {
+            cost = removeWatermark ? settings.costs.imageCreate_noWatermark : settings.costs.imageCreate;
+        } else if (payload.type === 'generateContent' && payload.model === 'gemini-2.5-flash-image') {
+            cost = removeWatermark ? settings.costs.imageEdit_noWatermark : settings.costs.imageEdit;
+        } else if (payload.type === 'generateContent' && payload.model === 'gemini-2.5-flash-preview-tts') {
+            cost = Math.ceil(payload.contents[0].parts[0].text.length / 100) * settings.costs.textToSpeech;
+        } else if (payload.type === 'rewrite') {
+            cost = settings.costs.contentRewrite ?? 0;
+        } else if (payload.type === 'generate-tweets') {
+            cost = settings.costs.tweetGenerator ?? 0;
         }
         
-        res.json({ message: 'Test email sent successfully!', details: { to: testEmail, from: MAILERSEND_SENDER_EMAIL } });
+        // Deduct points
+        const userRes = await client.query('SELECT points FROM users WHERE id = $1 FOR UPDATE', [req.userId]);
+        if (userRes.rows[0].points < cost) {
+            return res.status(402).json({ message: 'Insufficient points' });
+        }
+        const updatedUserRes = await client.query('UPDATE users SET points = points - $1 WHERE id = $2 RETURNING *', [cost, req.userId]);
+        
+        let aiResult;
+        
+        if (payload.type === 'generateImages') {
+            const response = await ai.models.generateImages({ model: payload.model, prompt: payload.prompt, config: payload.config });
+            aiResult = { dataUrl: `data:image/png;base64,${response.generatedImages[0].image.imageBytes}` };
+        } else if (payload.type === 'generateContent' && payload.model === 'gemini-2.5-flash-image') {
+            const response = await ai.models.generateContent(payload);
+            const part = response.candidates[0].content.parts.find(p => p.inlineData);
+            aiResult = { dataUrl: `data:image/png;base64,${part.inlineData.data}` };
+        } else if (payload.type === 'generateContent' && payload.model === 'gemini-2.5-flash-preview-tts') {
+            const response = await ai.models.generateContent(payload);
+            const part = response.candidates[0].content.parts.find(p => p.inlineData);
+            aiResult = { base64Audio: part.inlineData.data };
+        } else if (payload.type === 'rewrite') {
+             const systemInstruction = {
+                'simplify': "You are an expert content editor. Rewrite the following text to make it simpler and easier to understand, as if explaining it to a high school student. Maintain the core message.",
+                'summarize': "You are a skilled summarizer. Condense the following text into its most essential points. The result should be significantly shorter but capture the main idea.",
+                'expand': "You are a creative writer. Expand on the following text, adding more detail, examples, and descriptive language to make it longer and more comprehensive.",
+                'professional': "You are a professional business writer. Rewrite the following text in a formal, corporate tone. Use professional vocabulary and a structured format.",
+                'points': "You are a content organizer. Convert the main ideas of the following text into a clear, concise bulleted list. Each point should be easy to scan."
+            }[payload.style];
+            
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: payload.text,
+                config: { systemInstruction: systemInstruction }
+            });
+            aiResult = { text: response.text };
+
+        } else if (payload.type === 'generate-tweets') {
+             const prompt = `Based on the topic "${payload.idea}", generate 3-5 engaging and distinct tweets. Each tweet should be concise, include relevant hashtags, and have a different angle (e.g., a question, a surprising fact, a call to action). Format the output clearly, separating each tweet.`;
+              const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt,
+              });
+             aiResult = { text: response.text };
+        }
+        
+        await client.query('COMMIT');
+        const updatedUser = updatedUserRes.rows[0];
+        delete updatedUser.password_hash;
+        res.json({ result: aiResult, user: updatedUser });
 
     } catch (error) {
-        console.error('MailerSend Error:', error);
-        res.status(500).json({ message: error.message || 'An internal error occurred.', details: error.details || null });
+        await client.query('ROLLBACK');
+        console.error('AI Generation Proxy Error:', error);
+        res.status(500).json({ message: error.message || 'An error occurred during AI generation.' });
+    } finally {
+        client.release();
     }
 });
 
-// --- Server Startup ---
+// Admin get all users
+app.get('/api/admin/users', authMiddleware, adminMiddleware, async(req, res) => {
+     const client = await pool.connect();
+     try {
+         const result = await client.query('SELECT id, username, email, points, country, status, is_admin, created_at FROM users ORDER BY created_at DESC');
+         res.json({ users: result.rows });
+     } catch (e) {
+         res.status(500).json({ message: 'Failed to fetch users' });
+     } finally {
+         client.release();
+     }
+});
 
-const initializeDatabase = async () => {
-    if (!pool) {
-        console.warn("Database pool not available. Skipping schema initialization.");
-        return;
-    }
+// Admin update user
+app.put('/api/admin/users/:id', authMiddleware, adminMiddleware, async(req, res) => {
+    const { id } = req.params;
+    const { points, status } = req.body;
+    const client = await pool.connect();
     try {
-        console.log("Initializing database schema...");
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                username VARCHAR(50) UNIQUE NOT NULL,
-                email VARCHAR(255) UNIQUE NOT NULL,
-                password_hash VARCHAR(255) NOT NULL,
-                country VARCHAR(10) NOT NULL,
-                points INTEGER DEFAULT 0,
-                is_admin BOOLEAN DEFAULT FALSE,
-                referral_code VARCHAR(50) UNIQUE,
-                referrer_id INTEGER REFERENCES users(id),
-                status VARCHAR(20) DEFAULT 'active',
-                auth_token VARCHAR(255),
-                last_login TIMESTAMPTZ,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                last_daily_claim TIMESTAMPTZ,
-                referrals INTEGER DEFAULT 0
-            );
-        `);
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS settings (
-                id INTEGER PRIMARY KEY,
-                settings_json JSONB
-            );
-        `);
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS history (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL REFERENCES users(id),
-                type VARCHAR(50) NOT NULL,
-                prompt TEXT,
-                result_url TEXT,
-                cost INTEGER,
-                date TIMESTAMPTZ DEFAULT NOW()
-            );
-        `);
-        await pool.query(`
-             CREATE TABLE IF NOT EXISTS operations (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL REFERENCES users(id),
-                type VARCHAR(50) NOT NULL,
-                cost INTEGER,
-                timestamp TIMESTAMPTZ DEFAULT NOW()
-            );
-        `);
-        console.log("Database schema initialized successfully.");
-    } catch (error) {
-        console.error("CRITICAL: Failed to initialize database schema.", error);
-        // This is a fatal error, so we should update the global error state
-        dbInitializationError = "فشل في تهيئة مخطط قاعدة البيانات. تحقق من سجلات الخادم.";
+        const result = await client.query(
+            'UPDATE users SET points = $1, status = $2 WHERE id = $3 RETURNING id, username, email, points, country, status, is_admin, created_at',
+            [points, status, id]
+        );
+        res.json({ user: result.rows[0] });
+    } catch(e) {
+        res.status(500).json({ message: 'Failed to update user'});
+    } finally {
+        client.release();
     }
-};
+});
+
+// Admin Stats
+app.get('/api/stats', authMiddleware, adminMiddleware, async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const usersCount = await client.query('SELECT COUNT(*) FROM users');
+        const operationsCount = await client.query('SELECT COUNT(*) FROM history');
+        const totalReferrals = await client.query('SELECT SUM(referrals) FROM users WHERE referrals IS NOT NULL');
+
+        res.json({
+            users: parseInt(usersCount.rows[0].count, 10),
+            operations: parseInt(operationsCount.rows[0].count, 10),
+            referrals: parseInt(totalReferrals.rows[0].sum, 10) || 0,
+            visitors: 0, // This would require a more complex tracking mechanism
+        });
+    } catch (e) {
+        res.status(500).json({ message: 'Failed to get stats' });
+    } finally {
+        client.release();
+    }
+});
 
 
+// --- Server Startup ---
 const startServer = async () => {
-    // Definitive Fix: Ensure DB schema exists before doing anything else.
     await initializeDatabase();
-    
-    if (pool) {
-        try {
-            // User requested to restore default theme/content on startup.
-            console.log("Attempting to reset application settings to default...");
-            await pool.query(
-                'INSERT INTO settings (id, settings_json) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET settings_json = EXCLUDED.settings_json', 
-                [JSON.stringify(defaultSettings)]
-            );
-            console.log("Application settings have been successfully reset to defaults.");
-        } catch (error) {
-            console.error("Could not reset settings to default:", error);
-        }
-    }
-
-    currentSettings = await fetchSettingsFromDB();
     app.listen(port, () => {
         console.log(`Server running on port ${port}`);
-        if(dbInitializationError) console.error("DATABASE WARNING:", dbInitializationError);
-        if(stripeInitializationError) console.error("STRIPE WARNING:", stripeInitializationError);
-        if(aiInitializationError) console.error("AI WARNING:", aiInitializationError);
+        if(dbInitializationError) console.error("SERVER IS RUNNING WITH DATABASE ERRORS.");
+        if(stripeInitializationError) console.error("SERVER IS RUNNING WITH STRIPE ERRORS.");
+        if(aiInitializationError) console.error("SERVER IS RUNNING WITH AI ERRORS.");
+        if(mailerSendInitializationError) console.error("SERVER IS RUNNING WITH MAILERSEND ERRORS.");
     });
 };
 
