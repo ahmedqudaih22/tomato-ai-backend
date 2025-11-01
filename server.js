@@ -889,6 +889,45 @@ app.get('/api/stats', authMiddleware, adminMiddleware, async (req, res) => {
     }
 });
 
+// Admin Test Email
+app.post('/api/admin/test-email', authMiddleware, adminMiddleware, async (req, res) => {
+    const { recipientEmail } = req.body;
+    if (mailerSendInitializationError) {
+        return res.status(503).json({ success: false, message: mailerSendInitializationError });
+    }
+    if (!recipientEmail) {
+        return res.status(400).json({ success: false, message: "Recipient email is required." });
+    }
+    
+    try {
+        const response = await fetch('https://api.mailersend.com/v1/email', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${MAILERSEND_API_TOKEN}`,
+            },
+            body: JSON.stringify({
+                from: { email: MAILERSEND_SENDER_EMAIL, name: "Tomato AI Test" },
+                to: [{ email: recipientEmail }],
+                subject: 'Tomato AI Test Email',
+                text: 'This is a test email from your Tomato AI application. If you received this, your email configuration is working correctly!',
+                html: '<p>This is a test email from your Tomato AI application. If you received this, your email configuration is working correctly!</p>'
+            })
+        });
+
+        if (response.ok) {
+            res.json({ success: true, message: `Test email sent successfully to ${recipientEmail}.` });
+        } else {
+            const errorBody = await response.json();
+            console.error("MailerSend API Error:", errorBody);
+            res.status(response.status).json({ success: false, message: 'Failed to send email.', details: errorBody });
+        }
+    } catch (error) {
+        console.error("Failed to send test email:", error);
+        res.status(500).json({ success: false, message: 'An internal server error occurred.', details: error.message });
+    }
+});
+
 
 // --- Server Startup ---
 const startServer = async () => {
