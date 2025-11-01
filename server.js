@@ -250,16 +250,16 @@ const invalidateSettingsCache = () => { settingsCache = null; };
 
 
 const maintenanceMiddleware = async (req, res, next) => {
-    if (!pool) return next(); // If DB is down, can't check settings, so let it pass to avoid blocking everything
+    if (!pool) return next();
 
     const settings = await getSettings();
     if (!settings.maintenance?.enabled) {
         return next();
     }
 
+    // First, check if the user is an already authenticated admin. If so, let them pass.
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-
     if (token) {
         try {
             const userRes = await pool.query(
@@ -267,26 +267,31 @@ const maintenanceMiddleware = async (req, res, next) => {
                 [token]
             );
             if (userRes.rows.length > 0 && userRes.rows[0].is_admin) {
-                return next(); // Admin is allowed
+                return next(); // Admin is allowed for any endpoint.
             }
         } catch (dbError) {
             console.error("Maintenance middleware DB error:", dbError);
-            // Fall through to block
+            // Fall through to block if we can't verify admin status.
         }
     }
-    
-    // Allow access to settings for the app to initialize and show maintenance page
-    if (req.path === '/api/settings' || req.path === '/api/config') {
-         if (req.path === '/api/settings') {
-            return res.status(503).json({
-                message: "Site is in maintenance mode",
-                settings: settings // Provide settings so frontend can render page
-            });
-         }
-         return next();
+
+    // If the user is not an authenticated admin, check for publicly allowed paths.
+    // These are needed for the maintenance page and login form to function.
+    if (req.path === '/api/config' || req.path === '/api/login') {
+        return next();
     }
 
-    return res.status(503).json({ 
+    if (req.path === '/api/settings') {
+        // This endpoint is special: it's "allowed" but returns a 503 with data
+        // so the frontend knows to display the maintenance page.
+        return res.status(503).json({
+            message: "Site is in maintenance mode",
+            settings: settings
+        });
+    }
+    
+    // For all other requests from non-admins, block them.
+    return res.status(503).json({
         message: "Site is in maintenance mode",
         maintenance_message_en: settings.maintenance.message_en,
         maintenance_message_ar: settings.maintenance.message_ar
