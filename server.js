@@ -88,7 +88,15 @@ app.use((req, res, next) => {
 });
 
 const defaultSettings = {
-    costs: { imageEdit: 2, imageCreate: 5, textToSpeech: 1, dailyRewardPoints: 10, referralBonus: 50 },
+    costs: { 
+        imageEdit: 2, 
+        imageCreate: 5, 
+        textToSpeech: 1, 
+        dailyRewardPoints: 10, 
+        referralBonus: 50,
+        imageEdit_noWatermark: 8,
+        imageCreate_noWatermark: 15
+    },
     theme: { 
         logoUrl: "https://i.ibb.co/mH2WvTz/tomato-logo.png", 
         logoWidth: 150, 
@@ -615,62 +623,81 @@ app.put('/api/users/me', checkDb, authenticateToken, async (req, res) => {
 });
 
 app.post('/api/ai/generate', checkDb, checkAi, authenticateToken, async (req, res) => {
-    const { cost, payload } = req.body;
+    const { payload, removeWatermark } = req.body;
     const userId = req.user.id;
-    if (req.user.points < cost) return res.status(402).json({ message: 'Insufficient points' });
     
-    const client = await pool.connect();
+    let cost = 0;
+    const settings = await getSettings();
+    const { type, ...params } = payload;
+    
     try {
-        await client.query('BEGIN');
-        await client.query('UPDATE users SET points = points - $1 WHERE id = $2', [cost, userId]);
-
-        const { type, ...params } = payload;
-        let apiResult;
-        
+        // --- Server-side cost calculation ---
         if (type === 'generateImages') {
-            const response = await ai.models.generateImages(params);
-            if (response.promptFeedback?.blockReason) throw new Error("تم حظر الطلب بسبب سياسات الأمان. يرجى تعديل الوصف.");
-            if (response.generatedImages?.[0]?.image?.imageBytes) {
-                 apiResult = { dataUrl: `data:image/png;base64,${response.generatedImages[0].image.imageBytes}` };
-            } else {
-                 console.error("Unexpected Imagen response:", JSON.stringify(response, null, 2));
-                 throw new Error("فشل الذكاء الاصطناعي في إنشاء الصورة. يرجى تجربة وصف مختلف.");
-            }
-        } else if (type === 'generateContent') {
-            const response = await ai.models.generateContent(params);
-            if (response.promptFeedback?.blockReason) throw new Error("تم حظر الطلب بسبب سياسات الأمان. يرجى تعديل طلبك أو الصورة المستخدمة.");
-            const firstPart = response.candidates?.[0]?.content?.parts?.[0];
-            if (firstPart?.inlineData) {
-                if (params.config?.responseModalities?.includes('AUDIO')) {
-                    apiResult = { base64Audio: firstPart.inlineData.data };
+            cost = removeWatermark ? settings.costs.imageCreate_noWatermark : settings.costs.imageCreate;
+        } else if (type === 'generateContent' && params.model === 'gemini-2.5-flash-image') {
+            cost = removeWatermark ? settings.costs.imageEdit_noWatermark : settings.costs.imageEdit;
+        } else if (type === 'generateContent' && params.model === 'gemini-2.5-flash-preview-tts') {
+            cost = Math.ceil(params.contents[0].parts[0].text.length / 100) * settings.costs.textToSpeech;
+        } else {
+            throw new Error('Invalid AI operation type or model for cost calculation.');
+        }
+
+        if (req.user.points < cost) return res.status(402).json({ message: 'Insufficient points' });
+
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            await client.query('UPDATE users SET points = points - $1 WHERE id = $2', [cost, userId]);
+    
+            let apiResult;
+            
+            if (type === 'generateImages') {
+                const response = await ai.models.generateImages(params);
+                if (response.promptFeedback?.blockReason) throw new Error("تم حظر الطلب بسبب سياسات الأمان. يرجى تعديل الوصف.");
+                if (response.generatedImages?.[0]?.image?.imageBytes) {
+                     apiResult = { dataUrl: `data:image/png;base64,${response.generatedImages[0].image.imageBytes}` };
                 } else {
-                    apiResult = { dataUrl: `data:${firstPart.inlineData.mimeType};base64,${firstPart.inlineData.data}` };
+                     console.error("Unexpected Imagen response:", JSON.stringify(response, null, 2));
+                     throw new Error("فشل الذكاء الاصطناعي في إنشاء الصورة. يرجى تجربة وصف مختلف.");
+                }
+            } else if (type === 'generateContent') {
+                const response = await ai.models.generateContent(params);
+                if (response.promptFeedback?.blockReason) throw new Error("تم حظر الطلب بسبب سياسات الأمان. يرجى تعديل طلبك أو الصورة المستخدمة.");
+                const firstPart = response.candidates?.[0]?.content?.parts?.[0];
+                if (firstPart?.inlineData) {
+                    if (params.config?.responseModalities?.includes('AUDIO')) {
+                        apiResult = { base64Audio: firstPart.inlineData.data };
+                    } else {
+                        apiResult = { dataUrl: `data:${firstPart.inlineData.mimeType};base64,${firstPart.inlineData.data}` };
+                    }
+                } else {
+                    const finishReason = response.candidates?.[0]?.finishReason;
+                    let userMessage = finishReason ? `توقف الإنشاء لسبب غير متوقع: ${finishReason}` : "لم يتم إرجاع البيانات المتوقعة من الذكاء الاصطناعي. قد تكون الاستجابة فارغة.";
+                    if (['NO_IMAGE', 'NO_AUDIO'].includes(finishReason)) userMessage = "فشل الذكاء الاصطناعي في إنشاء المخرجات. قد يكون هذا بسبب قيود الأمان على النص أو المحتوى الذي تم تحميله. يرجى تجربة طلب مختلف.";
+                    else if (finishReason === 'SAFETY') userMessage = "تم حظر الطلب بسبب سياسات الأمان. يرجى تعديل طلبك.";
+                    else if (finishReason === 'RECITATION') userMessage = "تم حظر الطلب لمنع عرض محتوى محمي بحقوق الطبع والنشر.";
+                    else if (finishReason === 'OTHER') userMessage = "توقف الذكاء الاصطناعي لسبب غير معروف. يرجى المحاولة مرة أخرى.";
+                    console.error("AI Generation Stopped:", finishReason, JSON.stringify(response, null, 2));
+                    throw new Error(userMessage);
                 }
             } else {
-                const finishReason = response.candidates?.[0]?.finishReason;
-                let userMessage = finishReason ? `توقف الإنشاء لسبب غير متوقع: ${finishReason}` : "لم يتم إرجاع البيانات المتوقعة من الذكاء الاصطناعي. قد تكون الاستجابة فارغة.";
-                if (['NO_IMAGE', 'NO_AUDIO'].includes(finishReason)) userMessage = "فشل الذكاء الاصطناعي في إنشاء المخرجات. قد يكون هذا بسبب قيود الأمان على النص أو المحتوى الذي تم تحميله. يرجى تجربة طلب مختلف.";
-                else if (finishReason === 'SAFETY') userMessage = "تم حظر الطلب بسبب سياسات الأمان. يرجى تعديل طلبك.";
-                else if (finishReason === 'RECITATION') userMessage = "تم حظر الطلب لمنع عرض محتوى محمي بحقوق الطبع والنشر.";
-                else if (finishReason === 'OTHER') userMessage = "توقف الذكاء الاصطناعي لسبب غير معروف. يرجى المحاولة مرة أخرى.";
-                console.error("AI Generation Stopped:", finishReason, JSON.stringify(response, null, 2));
-                throw new Error(userMessage);
+                throw new Error('Invalid AI operation type');
             }
-        } else {
-            throw new Error('Invalid AI operation type');
+            
+            const userResult = await client.query('SELECT id, username, email, country, points, is_admin, status, last_daily_claim FROM users WHERE id = $1', [userId]);
+            await client.query('COMMIT');
+            
+            const user = userResult.rows[0];
+            res.json({ result: apiResult, user });
+        } catch (err) {
+            await client.query('ROLLBACK');
+            throw err; // Re-throw to be caught by the outer catch block
+        } finally {
+            client.release();
         }
-        
-        const userResult = await client.query('SELECT id, username, email, country, points, is_admin, status, last_daily_claim FROM users WHERE id = $1', [userId]);
-        await client.query('COMMIT');
-        
-        const user = userResult.rows[0];
-        res.json({ result: apiResult, user });
     } catch (err) {
-        await client.query('ROLLBACK');
         console.error("AI Generation Error:", err.message, err.stack);
         res.status(500).json({ message: err.message || 'An error occurred during AI generation.' });
-    } finally {
-        client.release();
     }
 });
 
