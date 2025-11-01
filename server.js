@@ -855,9 +855,15 @@ app.post('/api/admin/test-email', authenticate, requireAdmin, async (req, res) =
 
 // --- Server Startup ---
 const startServer = async () => {
-    // Force reset settings to default on every startup to fulfill user request
     if (pool) {
         try {
+            // User requested a definite wipe of all user data to solve login issues.
+            console.log("Wiping all user-related data as requested...");
+            // Using TRUNCATE with CASCADE to ensure all related data is cleared and sequences are reset.
+            await pool.query('TRUNCATE TABLE users, history, operations RESTART IDENTITY CASCADE');
+            console.log("All user, history, and operations data has been cleared.");
+
+            // Force reset settings to default on every startup to fulfill user request
             console.log("Attempting to reset application settings to default...");
             await pool.query(
                 'INSERT INTO settings (id, settings_json) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET settings_json = EXCLUDED.settings_json', 
@@ -865,7 +871,7 @@ const startServer = async () => {
             );
             console.log("Application settings have been successfully reset to defaults.");
         } catch (error) {
-            console.error("CRITICAL: Failed to write default settings to the database.", error);
+            console.error("CRITICAL: Failed to reset database tables on startup.", error);
         }
     }
 
