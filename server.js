@@ -262,41 +262,6 @@ const sanitizeUser = (user) => {
     return sanitized;
 };
 
-const ensureAdminExists = async () => {
-    if (!pool) {
-        console.warn("Database not connected. Skipping admin user check.");
-        return;
-    }
-
-    const adminEmail = 'samy.qudaih95@gmail.com';
-    const adminUsername = 'samyqudaih';
-    const adminPassword = 'Sami12344';
-
-    try {
-        const salt = crypto.randomBytes(16).toString('hex');
-        const hash = crypto.pbkdf2Sync(adminPassword, salt, 1000, 64, 'sha512').toString('hex');
-        const passwordHash = `${salt}:${hash}`;
-        
-        const query = `
-            INSERT INTO users (username, email, password_hash, country, points, is_admin, status, referral_code)
-            VALUES ($1, $2, $3, 'SA', 9999, true, 'active', 'admin')
-            ON CONFLICT (email) 
-            DO UPDATE SET
-                username = EXCLUDED.username,
-                password_hash = EXCLUDED.password_hash,
-                is_admin = true,
-                status = 'active';
-        `;
-        
-        await pool.query(query, [adminUsername, adminEmail.toLowerCase(), passwordHash]);
-        console.log(`Admin user '${adminEmail}' checked/updated successfully.`);
-
-    } catch (error) {
-        console.error("CRITICAL ERROR ensuring admin user exists:", error);
-    }
-};
-
-
 // --- Middleware for Authentication ---
 
 const authenticate = async (req, res, next) => {
@@ -405,6 +370,10 @@ app.post('/api/register', maintenanceCheck, async (req, res) => {
         try {
             await client.query('BEGIN');
 
+            // Check if there are any users in the database to determine if this is the first user.
+            const userCountResult = await client.query('SELECT COUNT(*) FROM users');
+            const isFirstUser = parseInt(userCountResult.rows[0].count, 10) === 0;
+
             let referrerId = null;
             const bonusPoints = currentSettings.costs.referralBonus || 50;
             if (referralCode) {
@@ -414,8 +383,9 @@ app.post('/api/register', maintenanceCheck, async (req, res) => {
                 }
             }
             
-            const initialPoints = referrerId ? bonusPoints : 0;
-            const isAdmin = false; // New users are never admins by default
+            // If it's the first user, make them admin and give them points. Otherwise, apply referral logic.
+            const isAdmin = isFirstUser;
+            const initialPoints = isFirstUser ? 9999 : (referrerId ? bonusPoints : 0);
             
             const newReferralCode = crypto.randomBytes(4).toString('hex');
             const newUserQuery = `
@@ -428,7 +398,7 @@ app.post('/api/register', maintenanceCheck, async (req, res) => {
             ]);
             const newUser = newUserResult.rows[0];
 
-            if (referrerId) {
+            if (referrerId && !isFirstUser) {
                 await client.query('UPDATE users SET points = points + $1, referrals = referrals + 1 WHERE id = $2', [bonusPoints, referrerId]);
             }
             
@@ -871,7 +841,6 @@ app.post('/api/admin/test-email', authenticate, requireAdmin, async (req, res) =
 
 // --- Server Startup ---
 const startServer = async () => {
-    await ensureAdminExists();
     currentSettings = await fetchSettingsFromDB();
     app.listen(port, () => {
         console.log(`Server running on port ${port}`);
