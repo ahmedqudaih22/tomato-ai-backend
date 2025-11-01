@@ -825,4 +825,48 @@ app.put('/api/admin/users/:id', checkDb, authenticateToken, isAdmin, async (req,
      if (isNaN(targetUserId)) return res.status(400).json({ message: 'Invalid user ID' });
      try {
         const targetUserRes = await pool.query('SELECT * FROM users WHERE id = $1', [targetUserId]);
-        if (targetUserRes.rows.length === 0) return res.status(404).json({ message: 'User not found'
+        if (targetUserRes.rows.length === 0) return res.status(404).json({ message: 'User not found' });
+        
+        const targetUser = targetUserRes.rows[0];
+
+        // Security check: Prevent admins from banning other admins or themselves
+        if (targetUser.is_admin && status === 'banned') {
+            return res.status(403).json({ message: 'Admins cannot be banned.' });
+        }
+
+        const updates = [];
+        const values = [];
+        let valueIndex = 1;
+
+        if (points !== undefined && typeof points === 'number') {
+            updates.push(`points = $${valueIndex++}`);
+            values.push(points);
+        }
+        if (status !== undefined && ['active', 'banned'].includes(status)) {
+            updates.push(`status = $${valueIndex++}`);
+            values.push(status);
+        }
+
+        if (updates.length === 0) {
+            return res.status(400).json({ message: 'No valid fields to update provided.' });
+        }
+
+        values.push(targetUserId);
+        const query = `UPDATE users SET ${updates.join(', ')} WHERE id = $${valueIndex} RETURNING id, username, email, country, points, is_admin, status, last_daily_claim`;
+        
+        const result = await pool.query(query, values);
+        res.json({ user: result.rows[0], message: 'User updated successfully.' });
+
+     } catch(err) {
+         console.error(`Error updating user ${targetUserId}:`, err);
+         res.status(500).json({ message: 'Internal server error' });
+     }
+});
+
+// --- Server Startup ---
+(async () => {
+    await initializeDbSchema();
+    app.listen(port, () => {
+        console.log(`Server is listening on port ${port}`);
+    });
+})();
