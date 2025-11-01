@@ -222,6 +222,21 @@ const initializeDatabase = async () => {
             );
         `);
 
+        // --- Start Schema Migration ---
+        // This block ensures existing databases get updated with new columns.
+        const checkReferralsColumn = await client.query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name='users' AND column_name='referrals'
+        `);
+
+        if (checkReferralsColumn.rows.length === 0) {
+            console.log("Migrating database: Adding 'referrals' column to 'users' table...");
+            await client.query('ALTER TABLE users ADD COLUMN referrals INTEGER DEFAULT 0');
+            console.log("'referrals' column added successfully.");
+        }
+        // --- End Schema Migration ---
+        
         await client.query(`
             CREATE TABLE IF NOT EXISTS settings (
                 key VARCHAR(255) PRIMARY KEY,
@@ -261,11 +276,11 @@ const initializeDatabase = async () => {
              console.log('Settings already exist in DB.');
         }
 
-        console.log('Database schema initialization complete.');
+        console.log('Database schema initialization and migration complete.');
     } catch (err) {
-        console.error('Database initialization failed:', err);
+        console.error('Database initialization/migration failed:', err);
         // This is a critical error, the app might not function correctly
-        dbInitializationError = `فشل في تهيئة مخطط قاعدة البيانات: ${err.message}`;
+        dbInitializationError = `فشل في تهيئة/ترحيل مخطط قاعدة البيانات: ${err.message}`;
     } finally {
         client.release();
     }
@@ -350,8 +365,8 @@ app.post('/api/register', async (req, res) => {
 
     const { username, email, password, country, referralCode } = req.body;
     
-    if (!username) {
-        return res.status(400).json({ message: 'Username is required.' });
+    if (!username || !email || !password) {
+        return res.status(400).json({ message: 'Username, email, and password are required.' });
     }
     
     const client = await pool.connect();
