@@ -115,6 +115,54 @@ const defaultSettings = {
             button_ar: "ابدأ الإبداع الآن",
             button_en: "Start Creating Now",
             background_image: "https://i.ibb.co/wzR06pM/cta-bg.png"
+        },
+        benefits: {
+            title_ar: "ثورة الإبداع بالذكاء الاصطناعي: لماذا Tomato AI هو الخيار الأفضل؟",
+            title_en: "The AI Creativity Revolution: Why Tomato AI is the Best Choice?",
+            items: [
+                { icon: "⚡️", title_ar: "سرعة فائقة", text_ar: "معالجة طلباتك في ثوانٍ بفضل خوادمنا السريعة.", title_en: "Blazing Speed", text_en: "Process your requests in seconds with our fast servers." },
+                { icon: "💎", title_ar: "جودة لا تُضاهى", text_ar: "نتائج AI احترافية تنافس أفضل الأدوات المدفوعة.", title_en: "Unmatched Quality", text_en: "Professional AI results that rival the best paid tools." },
+                { icon: "🛡️", title_ar: "أمان بياناتك", text_ar: "بياناتك وملفاتك مشفرة ومؤمنة بالكامل.", title_en: "Your Data's Security", text_en: "Your data and files are fully encrypted and secured." },
+                { icon: "🌍", title_ar: "دعم عربي متكامل", text_ar: "واجهة ودعم فني باللغة العربية.", title_en: "Full Arabic Support", text_en: "Interface and technical support in Arabic." }
+            ]
+        },
+        useCases: {
+            title_ar: "مَن يستفيد من Tomato AI؟",
+            title_en: "Who Benefits from Tomato AI?",
+            items: [
+                { icon: "🎬", title_ar: "صناع المحتوى", text_ar: "إنشاء تعليق صوتي طبيعي لفيديوهات يوتيوب وتيك توك.", title_en: "Content Creators", text_en: "Create natural voiceovers for YouTube and TikTok videos." },
+                { icon: "🎨", title_ar: "المصممون والفنانون", text_ar: "تحويل الأفكار النصية المجردة إلى صور فنية عالية الجودة.", title_en: "Designers & Artists", text_en: "Turn abstract text ideas into high-quality artistic images." },
+                { icon: "💼", title_ar: "المسوقون وأصحاب الأعمال", text_ar: "تعديل وتحسين صور المنتجات للإعلانات في ثوانٍ.", title_en: "Marketers & Businesses", text_en: "Edit and enhance product photos for ads in seconds." }
+            ]
+        },
+        testimonials: {
+            title_ar: "ماذا يقول المستخدمون عنا؟",
+            title_en: "What Do Our Users Say?",
+            items: [
+                { id: 1, name_ar: "علياء منصور", name_en: "Alia Mansour", role_ar: "صانعة محتوى", role_en: "Content Creator", quote_ar: "وفر عليّ أداة تحويل النص إلى صوت ساعات من التسجيل الصوتي! الجودة مذهلة واللهجة طبيعية جدًا.", quote_en: "The text-to-speech tool saved me hours of voice recording! The quality is amazing and the dialect is very natural.", avatarUrl: "https://i.pravatar.cc/150?img=1" },
+                { id: 2, name_ar: "خالد الغامدي", name_en: "Khalid Al-Ghamdi", role_ar: "مصمم جرافيك", role_en: "Graphic Designer", quote_ar: "مولّد الصور غيّر طريقة عملي. أستطيع الآن تجربة أفكار بصرية بسرعة فائقة قبل البدء في التصميم الفعلي.", quote_en: "The image generator has changed my workflow. I can now experiment with visual ideas incredibly fast before starting the actual design.", avatarUrl: "https://i.pravatar.cc/150?img=3" },
+                { id: 3, name_ar: "فاطمة الزهراء", name_en: "Fatima Al-Zahra", role_ar: "مديرة تسويق", role_en: "Marketing Manager", quote_ar: "أستخدم محرر الصور يوميًا لتعديل صور منتجاتنا. ميزة الإزالة والتغيير باستخدام النص عبقرية وتوفر الوقت.", quote_en: "I use the image editor daily to modify our product photos. The feature to remove and change things with text is genius and a huge time-saver.", avatarUrl: "https://i.pravatar.cc/150?img=5" },
+                { id: 4, name_ar: "يوسف شهاب", name_en: "Youssef Shehab", role_ar: "مطور تطبيقات", role_en: "App Developer", quote_ar: "واجهة برمجة التطبيقات (API) سهلة الاستخدام وموثوقة. تمكنت من دمجها في تطبيقي بسلاسة.", quote_en: "The API is easy to use and reliable. I was able to integrate it into my application seamlessly.", avatarUrl: "https://i.pravatar.cc/150?img=7" },
+                { id: 5, name_ar: "نور حسين", name_en: "Noor Hussein", role_ar: "طالبة", role_en: "Student", quote_ar: "موقع رائع لمشاريعي الجامعية، خاصة إنشاء الصور التوضيحية. الأسعار معقولة جدًا للطلاب.", quote_en: "A fantastic site for my university projects, especially for creating illustrative images. The prices are very reasonable for students.", avatarUrl: "https://i.pravatar.cc/150?img=8" }
+            ]
+        },
+        faq: {
+            title_ar: "إجابات سريعة لأسئلتكم",
+            title_en: "Quick Answers to Your Questions",
+            items: [
+                { id: 1, q_ar: "هل الخدمات مجانية؟", q_en: "Are the services free?", a_ar: "نحن نقدم 10 نقاط مجانية عند التسجيل لتجربة خدماتنا. بعد ذلك، يمكنك شراء باقات نقاط بأسعار معقولة من المتجر.", a_en: "We offer 10 free points upon registration to try our services. Afterwards, you can purchase affordable points packages from the store." },
+                { id: 2, q_ar: "ماذا أفعل إذا واجهت مشكلة؟", q_en: "What if I encounter a problem?", a_ar: "يمكنك التواصل مع فريق الدعم الفني عبر البريد الإلكتروني support@tomatoai.net وسنكون سعداء بمساعدتك.", a_en: "You can contact our technical support team via email at support@tomatoai.net and we will be happy to assist you." },
+                { id: 3, q_ar: "كيف أضمن أمان بياناتي؟", q_en: "How is my data security ensured?", a_ar: "نحن نستخدم أحدث تقنيات التشفير لحماية جميع بياناتك وصورك. خصوصيتك هي أولويتنا القصوى.", a_en: "We use the latest encryption technologies to protect all your data and images. Your privacy is our top priority." },
+                { id: 4, q_ar: "هل يمكنني استخدام النتائج لأغراض تجارية؟", q_en: "Can I use the results for commercial purposes?", a_ar: "نعم، جميع الصور والملفات الصوتية التي تنشئها هي ملكك ولك كامل الحق في استخدامها لأي غرض، سواء كان شخصيًا أو تجاريًا.", a_en: "Yes, all images and audio files you generate are your property and you have the full right to use them for any purpose, whether personal or commercial." }
+            ]
+        },
+        finalCta: {
+            title_ar: "هل أنت مستعد لبدء الإبداع؟",
+            title_en: "Ready to Start Creating?",
+            text_ar: "انضم إلى آلاف المبدعين والمحترفين الذين يستخدمون Tomato AI. سجل الآن مجانًا.",
+            text_en: "Join thousands of creators and professionals using Tomato AI. Sign up now for free.",
+            button_ar: "أنشئ حسابك المجاني",
+            button_en: "Create Your Free Account"
         }
     },
     store: { packages: [{ id: 1, points: 100, price: 5 }, { id: 2, points: 250, price: 10 }, { id: 3, points: 300, price: 1 }, { id: 4, points: 1500, price: 40 }] },
@@ -531,7 +579,7 @@ app.post('/api/login', checkDb, async (req, res) => {
         console.error("Login error:", err);
         res.status(500).json({ message: 'Internal server error' });
     } finally {
-        client.release();
+        if (client) client.release();
     }
 });
 
@@ -777,123 +825,4 @@ app.put('/api/admin/users/:id', checkDb, authenticateToken, isAdmin, async (req,
      if (isNaN(targetUserId)) return res.status(400).json({ message: 'Invalid user ID' });
      try {
         const targetUserRes = await pool.query('SELECT * FROM users WHERE id = $1', [targetUserId]);
-        if (targetUserRes.rows.length === 0) return res.status(404).json({ message: 'User not found' });
-        if (targetUserRes.rows[0].is_admin && req.user.id === targetUserId && status === 'banned') {
-             return res.status(403).json({ message: 'Admins cannot ban themselves.' });
-        }
-        const result = await pool.query(
-            'UPDATE users SET points = points + $1, status = $2 WHERE id = $3 RETURNING id, username, email, country, points, is_admin, status, last_daily_claim',
-            [points, status, targetUserId]
-        );
-        res.json({ user: result.rows[0] });
-     } catch (err) {
-        console.error("Admin user update error:", err);
-        res.status(500).json({ message: 'Failed to update user' });
-     }
-});
-
-app.post('/api/admin/test-email', checkDb, authenticateToken, isAdmin, checkMailerSend, async (req, res) => {
-    const { testEmail } = req.body;
-    if (!testEmail) {
-        return res.status(400).json({ message: 'testEmail is required.' });
-    }
-    try {
-        const subject = `[TEST] Your Email Configuration for Tomato AI`;
-        const html = `<div style="font-family: Arial, sans-serif; text-align: center; color: #333;"><h2>This is a TEST email from Tomato AI!</h2><p>If you received this, your email configuration is working correctly.</p></div>`;
-        const result = await sendEmail(testEmail, subject, html, "Tomato AI (Test)");
-        res.status(200).json(result);
-    } catch (error) {
-        res.status(500).json({ message: error.message || 'Failed to send test email.', details: error.details || error.message || 'Unknown error' });
-    }
-});
-
-app.post('/api/history', checkDb, authenticateToken, async (req, res) => {
-    const { type, prompt, resultUrl, cost } = req.body;
-    try {
-        await pool.query(
-            'INSERT INTO history (user_id, type, prompt, result_url, cost) VALUES ($1, $2, $3, $4, $5)',
-            [req.user.id, type, prompt, resultUrl, cost]
-        );
-        res.sendStatus(201);
-    } catch (err) {
-        console.error("Error saving history:", err);
-        res.status(500).json({ message: 'Failed to save history' });
-    }
-});
-
-app.get('/api/history', checkDb, authenticateToken, async (req, res) => {
-    try {
-        const result = await pool.query(
-            'SELECT id, type, prompt, cost, result_url AS "resultUrl", created_at AS date FROM history WHERE user_id = $1 ORDER BY created_at DESC',
-            [req.user.id]
-        );
-        res.json({ history: result.rows });
-    } catch (err) {
-        console.error("Error fetching history:", err);
-        res.status(500).json({ message: 'Failed to fetch history' });
-    }
-});
-
-app.get('/api/stats', checkDb, authenticateToken, isAdmin, async (req, res) => {
-    try {
-        const usersCount = await pool.query('SELECT COUNT(*) FROM users');
-        const operationsCount = await pool.query('SELECT COUNT(*) FROM history');
-
-        res.json({
-            users: parseInt(usersCount.rows[0].count, 10),
-            operations: parseInt(operationsCount.rows[0].count, 10),
-            visitors: 0 // Placeholder for future implementation
-        });
-    } catch (err) {
-        console.error("Error fetching stats:", err);
-        res.status(500).json({ message: 'Failed to fetch statistics' });
-    }
-});
-
-
-app.get('/api/status', async (req, res) => {
-    let ai_enabled = false;
-    let message = aiInitializationError;
-    let message_ar = aiInitializationError || "خدمات الذكاء الاصطناعي معطلة.";
-
-    if (ai) {
-        try {
-            await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: 'hello' });
-            ai_enabled = true;
-            message = 'AI services are operational and the API key is valid.';
-            message_ar = 'خدمات الذكاء الاصطناعي فعّالة ومفتاح الواجهة البرمجية (API Key) صالح.';
-        } catch (error) {
-            console.error("AI Status Check Error:", error.message);
-            let userMessage = "The API key is likely invalid or has restrictions.";
-            let userMessageAr = "مفتاح الواجهة البرمجية (API Key) غير صالح على الأرجح أو عليه قيود.";
-            if (error.message.includes('API key not valid')) {
-                userMessage = "API key not valid. Please check your key.";
-                userMessageAr = "مفتاح الواجهة البرمجية (API Key) غير صالح. يرجى التحقق من المفتاح الخاص بك.";
-            } else if (error.message.includes('billing')) {
-                userMessage = "API key is valid, but billing is not enabled for the project.";
-                userMessageAr = "مفتاح الواجهة البرمجية صالح، ولكن الفوترة غير مفعلة للمشروع.";
-            } else if (error.message.includes('permission denied')) {
-                userMessage = "The API key does not have permission to use the Gemini API.";
-                userMessageAr = "مفتاح الواجهة البرمجية لا يملك الصلاحية لاستخدام Gemini API.";
-            }
-            message = userMessage;
-            message_ar = userMessageAr;
-        }
-    }
-    
-    res.json({
-        ai_enabled: ai_enabled,
-        message: message,
-        message_ar: message_ar,
-        email_enabled: !mailerSendInitializationError,
-        email_message: !mailerSendInitializationError ? 'Email services are operational.' : mailerSendInitializationError,
-        email_message_ar: !mailerSendInitializationError ? 'خدمات البريد الإلكتروني فعّالة.' : "متغيرات بيئة MailerSend غير مُعينة. إرسال البريد الإلكتروني معطل.",
-    });
-});
-
-// --- Start Server ---
-app.listen(port, async () => {
-    console.log(`Server listening on port ${port}`);
-    await initializeDbSchema();
-    await getSettings(); // Prime the cache on start
-});
+        if (targetUserRes.rows.length === 0) return res.status(404).json({ message: 'User not found'
