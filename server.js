@@ -1,4 +1,5 @@
 
+
 // A full-stack backend for Tomato AI
 const express = require('express');
 const { Pool } = require('pg');
@@ -156,7 +157,10 @@ const defaultSettings = {
                 { id: 4, quote_ar: "واجهة سهلة وبسيطة، ونظام النقاط واضح وعادل. أحببت التجربة وسأستمر في استخدامها.", quote_en: "Easy and simple interface, and the points system is clear and fair. I loved the experience and will continue to use it.", name_ar: "فاطمة علي", name_en: "Fatima Ali", role_ar: "مدونة", role_en: "Blogger", avatarUrl: "https://i.ibb.co/N1Xq3t3/avatar4.jpg" },
                 { id: 5, quote_ar: "أداة إعادة الصياغة ممتازة للطلاب. ساعدتني في تحسين كتاباتي الأكاديمية بشكل كبير.", quote_en: "The rewriting tool is excellent for students. It has significantly helped me improve my academic writing.", name_ar: "عمر الشريف", name_en: "Omar Sharif", role_ar: "طالب جامعي", role_en: "University Student", avatarUrl: "https://i.ibb.co/9h7r2Tf/avatar5.jpg" },
                 { id: 6, quote_ar: "كنت مترددًا في البداية، لكن جودة الصور التي تم إنشاؤها أبهرتني. خدمة عملاء سريعة ومتعاونة أيضًا.", quote_en: "I was hesitant at first, but the quality of the generated images amazed me. The customer service is also fast and helpful.", name_ar: "ليلى الخوري", name_en: "Layla El Khoury", role_ar: "مصورة فوتوغرافية", role_en: "Photographer", avatarUrl: "https://i.ibb.co/gDFtNmd/avatar6.jpg" },
-                { id: 7, quote_ar: "أفضل استثمار قمت به لعملي. يوفر الوقت والجهد ويقدم نتائج احترافية لا مثيل لها.", quote_en: "The best investment I've made for my business. It saves time, effort, and delivers unparalleled professional results.", name_ar: "يوسف منصور", name_en: "Youssef Mansour", role_ar: "رائد أعمال", role_en: "Entrepreneur", avatarUrl: "https://i.ibb.co/SNk3zS1/avatar7.jpg" }
+                { id: 7, quote_ar: "أفضل استثمار قمت به لعملي. يوفر الوقت والجهد ويقدم نتائج احترافية لا مثيل لها.", quote_en: "The best investment I've made for my business. It saves time, effort, and delivers unparalleled professional results.", name_ar: "يوسف منصور", name_en: "Youssef Mansour", role_ar: "رائد أعمال", role_en: "Entrepreneur", avatarUrl: "https://i.ibb.co/SNk3zS1/avatar7.jpg" },
+                { id: 8, quote_ar: "أدير متجرًا صغيرًا، وهذه الأداة هي منقذي لإنشاء منشورات وسائل التواصل الاجتماعي. مولد التغريدات عبقري!", quote_en: "I run a small shop, and this tool is my savior for creating social media posts. The tweet generator is genius!", name_ar: "نادية حسن", name_en: "Nadia Hassan", role_ar: "صاحبة متجر", role_en: "Shop Owner", avatarUrl: "https://i.ibb.co/8mr1f81/avatar8.jpg" },
+                { id: 9, quote_ar: "أستخدم ميزة تحويل النص إلى صوت لإنشاء مواد تعليمية لطلابي. اللهجات المختلفة تجعل المحتوى أكثر جاذبية.", quote_en: "I use the text-to-speech feature to create educational materials for my students. The different dialects make the content much more engaging.", name_ar: "أحمد إبراهيم", name_en: "Ahmed Ibrahim", role_ar: "مدرس", role_en: "Teacher", avatarUrl: "https://i.ibb.co/9vVzqB3/avatar9.jpg" },
+                { id: 10, quote_ar: "كمطور، أنا معجب جدًا بمدى سلاسة كل شيء. من الواضح أن هناك الكثير من العمل الجيد وراء هذا المشروع.", quote_en: "As a developer, I'm very impressed with how smoothly everything runs. It's clear a lot of good work went into this project.", name_ar: "زينب مراد", name_en: "Zainab Murad", role_ar: "مطور برامج", role_en: "Software Developer", avatarUrl: "https://i.ibb.co/J3BzkzM/avatar10.jpg" }
             ]
         },
         faq: {
@@ -547,17 +551,19 @@ app.post('/api/ai/generate', authenticate, async (req, res) => {
                 [user.id, payload.type, cost]
             );
 
+            // Fix: Destructure `payload` to remove the internal `type` property before sending to the Gemini API.
+            const { type, ...apiPayload } = payload;
             let result;
-            if (payload.type === 'generateImages') {
-                const response = await ai.models.generateImages(payload);
+            if (type === 'generateImages') {
+                const response = await ai.models.generateImages(apiPayload);
                 const base64Image = response.generatedImages[0].image.imageBytes;
                 result = { dataUrl: `data:image/png;base64,${base64Image}` };
-            } else if (payload.type === 'generateContent') {
-                const response = await ai.models.generateContent(payload);
-                if (payload.model === 'gemini-2.5-flash-image') {
+            } else if (type === 'generateContent') {
+                const response = await ai.models.generateContent(apiPayload);
+                if (apiPayload.model === 'gemini-2.5-flash-image') {
                     const part = response.candidates[0].content.parts.find(p => p.inlineData);
                     result = { dataUrl: `data:image/png;base64,${part.inlineData.data}` };
-                } else if (payload.model === 'gemini-2.5-flash-preview-tts') {
+                } else if (apiPayload.model === 'gemini-2.5-flash-preview-tts') {
                     const part = response.candidates[0].content.parts.find(p => p.inlineData);
                     result = { base64Audio: part.inlineData.data };
                 }
