@@ -339,25 +339,37 @@ app.post('/api/register', maintenanceCheck, async (req, res) => {
         const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
         const passwordHash = `${salt}:${hash}`;
         
-        let referrerId = null;
-        const bonusPoints = currentSettings.costs.referralBonus || 50;
-        if (referralCode) {
-            const referrerResult = await pool.query('SELECT id FROM users WHERE referral_code = $1', [referralCode]);
-            if (referrerResult.rows.length > 0) {
-                referrerId = referrerResult.rows[0].id;
-            }
-        }
-        
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
+
+            const userCountResult = await client.query('SELECT COUNT(*) FROM users');
+            const isFirstUser = parseInt(userCountResult.rows[0].count) === 0;
+
+            let referrerId = null;
+            const bonusPoints = currentSettings.costs.referralBonus || 50;
+            if (referralCode) {
+                const referrerResult = await client.query('SELECT id FROM users WHERE referral_code = $1', [referralCode]);
+                if (referrerResult.rows.length > 0) {
+                    referrerId = referrerResult.rows[0].id;
+                }
+            }
+
+            const initialPoints = isFirstUser ? 9999 : (referrerId ? bonusPoints : 0);
+            const isAdmin = isFirstUser;
             
             const newReferralCode = crypto.randomBytes(4).toString('hex');
-            const newUserQuery = 'INSERT INTO users (username, email, password_hash, country, points, referral_code, referrer_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *';
-            const newUserResult = await client.query(newUserQuery, [username, email.toLowerCase(), passwordHash, country, bonusPoints, newReferralCode, referrerId]);
+            const newUserQuery = `
+                INSERT INTO users (username, email, password_hash, country, points, is_admin, referral_code, referrer_id, status) 
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active') 
+                RETURNING *`;
+
+            const newUserResult = await client.query(newUserQuery, [
+                username, email.toLowerCase(), passwordHash, country, initialPoints, isAdmin, newReferralCode, referrerId
+            ]);
             const newUser = newUserResult.rows[0];
 
-            if (referrerId) {
+            if (referrerId && !isFirstUser) {
                 await client.query('UPDATE users SET points = points + $1, referrals = referrals + 1 WHERE id = $2', [bonusPoints, referrerId]);
             }
             
@@ -799,54 +811,8 @@ app.post('/api/admin/test-email', authenticate, requireAdmin, async (req, res) =
 });
 
 // --- Server Startup ---
-const ensureAdminExists = async () => {
-    if (!pool) {
-        console.warn("Database pool not available, skipping admin user check.");
-        return;
-    }
-    const adminEmail = 'samy.qudaih95@gmail.com';
-    const adminUsername = 'samyqudaih';
-    const adminPassword = 'Sami12344';
-
-    try {
-        const client = await pool.connect();
-        try {
-            const res = await client.query('SELECT * FROM users WHERE email = $1', [adminEmail]);
-            
-            const salt = crypto.randomBytes(16).toString('hex');
-            const hash = crypto.pbkdf2Sync(adminPassword, salt, 1000, 64, 'sha512').toString('hex');
-            const passwordHash = `${salt}:${hash}`;
-
-            if (res.rows.length === 0) {
-                // Admin does not exist, create it
-                console.log("Admin user not found, creating one...");
-                const referralCode = crypto.randomBytes(4).toString('hex');
-                await client.query(
-                    `INSERT INTO users (username, email, password_hash, country, points, is_admin, status, referral_code)
-                     VALUES ($1, $2, $3, 'SA', 9999, true, 'active', $4)`,
-                    [adminUsername, adminEmail, passwordHash, referralCode]
-                );
-                console.log("Admin user created successfully.");
-            } else {
-                // Admin exists, update password and ensure admin status
-                console.log("Admin user found, ensuring credentials and status are correct...");
-                await client.query(
-                    `UPDATE users SET password_hash = $1, is_admin = true, status = 'active', username = $2 WHERE email = $3`,
-                    [passwordHash, adminUsername, adminEmail]
-                );
-                console.log("Admin user updated successfully.");
-            }
-        } finally {
-            client.release();
-        }
-    } catch (error) {
-        console.error("Failed to ensure admin user exists:", error);
-    }
-};
-
 const startServer = async () => {
     currentSettings = await fetchSettingsFromDB();
-    await ensureAdminExists(); // Guarantees the admin account is always accessible
     app.listen(port, () => {
         console.log(`Server running on port ${port}`);
         if(dbInitializationError) console.error("DATABASE WARNING:", dbInitializationError);
