@@ -98,18 +98,19 @@ const defaultSettings = {
         imageCreate_noWatermark: 15,
         contentRewrite: 1,
         tweetGenerator: 1,
-        newUserPoints: 25, // Points for new users
+        newUserPoints: 25,
     },
     theme: { 
         logoUrl: "https://i.ibb.co/mH2WvTz/tomato-logo.png", 
         logoWidth: 150, 
-        logoHeight: 40,
+        logoHeight: 50,
         primaryColor: "#FF6B6B", 
         secondaryColor: "#2EC4B6", 
         navbarColor: "#FFFFFF", 
         navTextColor: "#2A323C",
         buttonPadding: 8,
         sliderHeight: 450,
+        navButtonFontSize: 16,
     },
     content: { 
         siteNameAr: "Tomato AI", siteNameEn: "Tomato AI",
@@ -118,15 +119,17 @@ const defaultSettings = {
             slide2: { image: "https://i.ibb.co/gZk8zM4/slide2.png", title_ar: "تعديل احترافي للصور", title_en: "Professional Image Editing", text_ar: "صف التعديل الذي تريده، ودع الذكاء الاصطناعي يقوم بالباقي.", text_en: "Describe the edit you want, and let the AI do the rest." },
             slide3: { image: "https://i.ibb.co/c1xX6gQ/slide3.png", title_ar: "تعليق صوتي فوري", title_en: "Instant Voiceovers", text_ar: "حوّل أي نص إلى تعليق صوتي طبيعي بلهجات متعددة.", text_en: "Convert any text into a natural voiceover in multiple dialects." },
         },
-        cta: {
-            title_ar: "انضم إلى آلاف المبدعين",
-            title_en: "Join Thousands of Creators",
-            subtitle_ar: "أطلق العنان لإمكانياتك مع أدوات الذكاء الاصطناعي سهلة الاستخدام.",
-            subtitle_en: "Unlock your potential with easy-to-use AI tools.",
-            button_ar: "ابدأ مجانًا",
-            button_en: "Start for Free"
+        homepageServices: {
+            title_ar: "خدماتنا الإبداعية",
+            title_en: "Our Creative Services",
+            items: [
+                { icon: "🎨", title_ar: "مولد الصور", title_en: "Image Generator", text_ar: "أنشئ صورًا فريدة من نوعها من خلال وصف نصي بسيط.", text_en: "Create unique images from simple text descriptions." },
+                { icon: "✂️", title_ar: "محرر الصور", title_en: "Image Editor", text_ar: "قم بإجراء تعديلات معقدة على صورك باستخدام أوامر بسيطة.", text_en: "Make complex edits to your photos using simple commands." },
+                { icon: "🎙️", title_ar: "تحويل النص إلى صوت", title_en: "Text to Speech", text_ar: "أنتج تعليقات صوتية عالية الجودة بلهجات عربية متنوعة.", text_en: "Produce high-quality voiceovers in various Arabic dialects." },
+                { icon: "✍️", title_ar: "إعادة صياغة المحتوى", title_en: "Content Rewriter", text_ar: "قم بتبسيط، تلخيص، أو إضفاء طابع احترافي على نصوصك.", text_en: "Simplify, summarize, or professionalize your texts." }
+            ]
         },
-         benefits: {
+        benefits: {
             title_ar: "لماذا تختار Tomato AI؟",
             title_en: "Why Choose Tomato AI?",
             items: [
@@ -151,15 +154,26 @@ const defaultSettings = {
             title_en: "What Our Users Say",
             items: [
                 { id: 1, quote_ar: "أداة مذهلة! ساعدتني في إنشاء صور لحملتي التسويقية بسرعة لا تصدق. النتائج كانت أفضل مما توقعت.", quote_en: "Amazing tool! It helped me create images for my marketing campaign with incredible speed. The results were better than I expected.", name_ar: "سارة عبدالله", name_en: "Sara Abdullah", role_ar: "مديرة تسويق", role_en: "Marketing Manager", avatarUrl: "https://randomuser.me/api/portraits/women/11.jpg" },
-                { id: 2, quote_ar: "خاصية تحويل النص إلى صوت باللغة العربية رائعة. الأصوات طبيعية جدًا ومناسبة لمقاطع الفيديو الخاصة بي.", quote_en: "The text-to-speech feature in Arabic is fantastic. The voices are very natural and perfect for my videos.", name_ar: "أحمد المصري", name_en: "Ahmed Elmasry", role_ar: "صانع محتوى", role_en: "Content Creator", avatarUrl: "https://randomuser.me/api/portraits/men/22.jpg" }
+                { id: 2, quote_ar: "خاصية تحويل النص إلى صوت باللغة العربية رائعة. الأصوات طبيعية جدًا ومناسبة لمقاطع الفيديو الخاصة بي.", quote_en: "The text-to-speech feature in Arabic is fantastic. The voices are very natural and perfect for my videos.", name_ar: "أحمد المصري", name_en: "Ahmed Elmasry", role_ar: "صانع محتوى", role_en: "Content Creator", avatarUrl: "https://randomuser.me/api/portraits/men/22.jpg" },
+                { id: 3, quote_ar: "أستخدم محرر الصور لتنظيف الصور القديمة، والنتائج مدهشة. يوفر عليّ ساعات من العمل في فوتوشوب.", quote_en: "I use the image editor to clean up old photos, and the results are astonishing. It saves me hours of work in Photoshop.", name_ar: "خالد الشمري", name_en: "Khalid Al-Shammari", role_ar: "مصور فوتوغرافي", role_en: "Photographer", avatarUrl: "https://randomuser.me/api/portraits/men/33.jpg" },
+                { id: 4, quote_ar: "بصفتي طالبة، أداة إعادة الصياغة لا تقدر بثمن. تساعدني على فهم النصوص المعقدة وتقديمها بأسلوبي الخاص.", quote_en: "As a student, the rewriting tool is invaluable. It helps me understand complex texts and present them in my own style.", name_ar: "فاطمة علي", name_en: "Fatima Ali", role_ar: "طالبة جامعية", role_en: "University Student", avatarUrl: "https://randomuser.me/api/portraits/women/44.jpg" },
+                { id: 5, quote_ar: "واجهة المستخدم نظيفة وسهلة للغاية. تمكنت من البدء في إنشاء المحتوى خلال دقائق من التسجيل.", quote_en: "The user interface is so clean and easy. I was able to start creating content within minutes of signing up.", name_ar: "عمر حداد", name_en: "Omar Haddad", role_ar: "مدون", role_en: "Blogger", avatarUrl: "https://randomuser.me/api/portraits/men/55.jpg" },
+                { id: 6, quote_ar: "مولّد الصور هو لعبتي المفضلة الجديدة. الإمكانيات لا حصر لها والإبداع لا يتوقف.", quote_en: "The image generator is my new favorite toy. The possibilities are endless and the creativity never stops.", name_ar: "نورة القحطاني", name_en: "Noura Al-Qahtani", role_ar: "فنانة رقمية", role_en: "Digital Artist", avatarUrl: "https://randomuser.me/api/portraits/women/66.jpg" },
+                { id: 7, quote_ar: "الدعم الفني سريع ومتعاون. واجهت مشكلة بسيطة وتم حلها في أقل من ساعة.", quote_en: "Customer support is fast and helpful. I had a small issue and it was resolved in less than an hour.", name_ar: "يوسف مراد", name_en: "Youssef Murad", role_ar: "مطور ويب", role_en: "Web Developer", avatarUrl: "https://randomuser.me/api/portraits/men/77.jpg" },
+                { id: 8, quote_ar: "أحب نظام النقاط. يمكنني شراء ما أحتاجه فقط، والمكافآت اليومية تجعلني أعود للمزيد!", quote_en: "I love the points system. I can buy just what I need, and the daily rewards keep me coming back for more!", name_ar: "ريم الخوري", name_en: "Reem Khoury", role_ar: "مستقلة", role_en: "Freelancer", avatarUrl: "https://randomuser.me/api/portraits/women/88.jpg" },
+                { id: 9, quote_ar: "جودة الأصوات المنتجة تفوق أي خدمة أخرى جربتها. اللهجة المصرية واقعية جدًا.", quote_en: "The quality of the generated voices surpasses any other service I've tried. The Egyptian dialect is very realistic.", name_ar: "محمد فتحي", name_en: "Mohamed Fathi", role_ar: "منتج بودكاست", role_en: "Podcast Producer", avatarUrl: "https://randomuser.me/api/portraits/men/99.jpg" },
+                { id: 10, quote_ar: "هذا الموقع هو محطتي الوحيدة لكل احتياجات المحتوى الإبداعي. موصى به بشدة!", quote_en: "This site is my one-stop-shop for all creative content needs. Highly recommended!", name_ar: "ليلى منصور", name_en: "Layla Mansour", role_ar: "صاحبة متجر إلكتروني", role_en: "E-commerce Owner", avatarUrl: "https://randomuser.me/api/portraits/women/10.jpg" }
             ]
         },
         faq: {
             title_ar: "الأسئلة الشائعة",
             title_en: "Frequently Asked Questions",
             items: [
-                { id: 1, q_ar: "كيف أحصل على النقاط؟", q_en: "How do I get points?", a_ar: "يمكنك شراء النقاط مباشرة من المتجر، أو كسبها مجانًا من خلال المكافآت اليومية وبرنامج الإحالة.", a_en: "You can purchase points directly from the store, or earn them for free through daily rewards and the referral program." },
-                { id: 2, q_ar: "هل يمكنني استخدام الصور التي أنشئها لأغراض تجارية؟", q_en: "Can I use the images I create for commercial purposes?", a_ar: "نعم، جميع الصور التي تنشئها بدون علامة مائية هي ملكك ولك كامل الحق في استخدامها لأي غرض، بما في ذلك الأغراض التجارية.", a_en: "Yes, all images you generate without a watermark are yours and you have full rights to use them for any purpose, including commercial." }
+                { id: 1, q_ar: "كيف أحصل على النقاط؟", q_en: "How do I get points?", a_ar: "يمكنك شراء النقاط مباشرة من المتجر، أو كسبها مجانًا من خلال المكافآت اليومية وبرنامج الإحالة عند دعوة أصدقائك.", a_en: "You can purchase points directly from the store, or earn them for free through daily rewards and the referral program when you invite friends." },
+                { id: 2, q_ar: "هل يمكنني استخدام الصور التي أنشئها لأغراض تجارية؟", q_en: "Can I use the images I create for commercial purposes?", a_ar: "نعم، جميع الصور التي تنشئها بدون علامة مائية هي ملكك ولك كامل الحق في استخدامها لأي غرض، بما في ذلك الأغراض التجارية.", a_en: "Yes, all images you generate without a watermark are yours and you have full rights to use them for any purpose, including commercial." },
+                { id: 3, q_ar: "ما هي تكلفة الخدمات؟", q_en: "What is the cost of the services?", a_ar: "كل خدمة لها تكلفتها الخاصة بالنقاط. على سبيل المثال، إنشاء صورة يكلف 5 نقاط، بينما يكلف تعديلها نقطتين. يمكنك رؤية التكلفة قبل تأكيد أي عملية.", a_en: "Each service has its own cost in points. For example, generating an image costs 5 points, while editing one costs 2. You can see the cost before confirming any operation." },
+                { id: 4, q_ar: "هل بياناتي آمنة؟", q_en: "Is my data secure?", a_ar: "نعم، نحن نأخذ خصوصيتك وأمانك على محمل الجد. يتم تشفير جميع الاتصالات، ولا نشارك بياناتك مع أي طرف ثالث.", a_en: "Yes, we take your privacy and security very seriously. All communications are encrypted, and we do not share your data with any third parties." },
+                { id: 5, q_ar: "ماذا لو لم تعجبني النتيجة؟", q_en: "What if I don't like the result?", a_ar: "يتم خصم النقاط عند تنفيذ العملية. نوصي بأن تكون واضحًا جدًا في وصفك للحصول على أفضل النتائج. يمكنك دائمًا المحاولة مرة أخرى بتعليمات مختلفة.", a_en: "Points are deducted when the operation is executed. We recommend being very clear in your description to get the best results. You can always try again with different instructions." }
             ]
         },
         finalCta: {
@@ -682,7 +696,6 @@ app.post('/api/create-checkout-session', authMiddleware, async (req, res) => {
         const userRes = await client.query('SELECT email FROM users WHERE id = $1', [req.userId]);
         const userEmail = userRes.rows[0].email;
         
-        // --- FIX: Use the canonical URL for Stripe redirects ---
         const successUrl = 'https://tomatoai.net/#store?payment_success=true';
         const cancelUrl = 'https://tomatoai.net/#store?payment_cancelled=true';
         
@@ -707,7 +720,6 @@ app.post('/api/create-checkout-session', authMiddleware, async (req, res) => {
 
     } catch (error) {
         console.error("Stripe session error:", error);
-        // --- FIX: Return the specific error message from Stripe ---
         res.status(500).json({ message: 'Failed to create checkout session', error: error.message });
     } finally {
         client.release();
@@ -882,46 +894,6 @@ app.get('/api/stats', authMiddleware, adminMiddleware, async (req, res) => {
         client.release();
     }
 });
-
-// Admin Test Email
-app.post('/api/admin/test-email', authMiddleware, adminMiddleware, async (req, res) => {
-    const { recipientEmail } = req.body;
-    if (mailerSendInitializationError) {
-        return res.status(503).json({ success: false, message: mailerSendInitializationError });
-    }
-    if (!recipientEmail) {
-        return res.status(400).json({ success: false, message: "Recipient email is required." });
-    }
-    
-    try {
-        const response = await fetch('https://api.mailersend.com/v1/email', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${MAILERSEND_API_TOKEN}`,
-            },
-            body: JSON.stringify({
-                from: { email: MAILERSEND_SENDER_EMAIL, name: "Tomato AI Test" },
-                to: [{ email: recipientEmail }],
-                subject: 'Tomato AI Test Email',
-                text: 'This is a test email from your Tomato AI application. If you received this, your email configuration is working correctly!',
-                html: '<p>This is a test email from your Tomato AI application. If you received this, your email configuration is working correctly!</p>'
-            })
-        });
-
-        if (response.ok) {
-            res.json({ success: true, message: `Test email sent successfully to ${recipientEmail}.` });
-        } else {
-            const errorBody = await response.json();
-            console.error("MailerSend API Error:", errorBody);
-            res.status(response.status).json({ success: false, message: 'Failed to send email.', details: errorBody });
-        }
-    } catch (error) {
-        console.error("Failed to send test email:", error);
-        res.status(500).json({ success: false, message: 'An internal server error occurred.', details: error.message });
-    }
-});
-
 
 // --- Server Startup ---
 const startServer = async () => {
