@@ -265,6 +265,7 @@ const sanitizeUser = (user) => {
 // --- Middleware for Authentication ---
 
 const authenticate = async (req, res, next) => {
+    if (!pool) return res.status(503).json({ message: 'Database service is not available.' });
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
     if (token == null) return res.sendStatus(401);
@@ -288,6 +289,12 @@ const requireAdmin = (req, res, next) => {
 
 const maintenanceCheck = (req, res, next) => {
     if (currentSettings && currentSettings.maintenance && currentSettings.maintenance.enabled) {
+        if (!pool) {
+             return res.status(503).json({ 
+                message: 'Service Unavailable - Maintenance Mode',
+                settings: { maintenance: currentSettings.maintenance, theme: currentSettings.theme }
+            });
+        }
         const authHeader = req.headers['authorization'];
         const token = authHeader && authHeader.split(' ')[1];
         if (token) {
@@ -348,7 +355,7 @@ app.get('/api/status', maintenanceCheck, (req, res) => {
 
 // Auth Routes
 app.post('/api/register', maintenanceCheck, async (req, res) => {
-    if (!pool) return res.status(500).json({ message: 'Database service is not available.' });
+    if (!pool) return res.status(503).json({ message: 'Database service is not available.' });
     const { username, email, password, country, referralCode } = req.body;
     
     if (!username || !email || !password || !country) {
@@ -375,7 +382,7 @@ app.post('/api/register', maintenanceCheck, async (req, res) => {
             const isFirstUser = parseInt(userCountResult.rows[0].count, 10) === 0;
 
             let referrerId = null;
-            const bonusPoints = currentSettings.costs.referralBonus || 50;
+            const bonusPoints = (currentSettings.costs && currentSettings.costs.referralBonus) || 50;
             if (referralCode) {
                 const referrerResult = await client.query('SELECT id FROM users WHERE referral_code = $1', [referralCode]);
                 if (referrerResult.rows.length > 0) {
@@ -407,7 +414,8 @@ app.post('/api/register', maintenanceCheck, async (req, res) => {
 
             await client.query('COMMIT');
             
-            res.status(201).json({ token, user: sanitizeUser(newUser) });
+            const userForResponse = { ...newUser, auth_token: token };
+            res.status(201).json({ token, user: sanitizeUser(userForResponse) });
 
         } catch (e) {
             await client.query('ROLLBACK');
@@ -423,7 +431,7 @@ app.post('/api/register', maintenanceCheck, async (req, res) => {
 });
 
 app.post('/api/login', maintenanceCheck, async (req, res) => {
-    if (!pool) return res.status(500).json({ message: 'Database service is not available.' });
+    if (!pool) return res.status(503).json({ message: 'Database service is not available.' });
     const { identifier, password } = req.body;
 
     try {
@@ -532,7 +540,7 @@ app.post('/api/claim-daily-reward', authenticate, async (req, res) => {
     }
     
     try {
-        const rewardPoints = currentSettings.costs.dailyRewardPoints || 10;
+        const rewardPoints = (currentSettings.costs && currentSettings.costs.dailyRewardPoints) || 10;
         const result = await pool.query(
             'UPDATE users SET points = points + $1, last_daily_claim = NOW() WHERE id = $2 RETURNING *',
             [rewardPoints, userId]
@@ -715,6 +723,7 @@ app.post('/api/create-checkout-session', authenticate, async (req, res) => {
 });
 
 app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req, res) => {
+    if (!stripe) return res.status(503).json({ message: stripeInitializationError });
     const sig = req.headers['stripe-signature'];
     let event;
 
@@ -728,6 +737,11 @@ app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req,
     if (event.type === 'checkout.session.completed') {
         const session = event.data.object;
         const { userId, points } = session.metadata;
+
+        if (!pool) {
+            console.error("CRITICAL: Stripe webhook received but database is not available. User points not awarded.");
+            return res.status(500).send('Internal Server Error: Database unavailable.');
+        }
 
         try {
             await pool.query('UPDATE users SET points = points + $1 WHERE id = $2', [Number(points), Number(userId)]);
@@ -841,6 +855,20 @@ app.post('/api/admin/test-email', authenticate, requireAdmin, async (req, res) =
 
 // --- Server Startup ---
 const startServer = async () => {
+    // Force reset settings to default on every startup to fulfill user request
+    if (pool) {
+        try {
+            console.log("Attempting to reset application settings to default...");
+            await pool.query(
+                'INSERT INTO settings (id, settings_json) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET settings_json = EXCLUDED.settings_json', 
+                [JSON.stringify(defaultSettings)]
+            );
+            console.log("Application settings have been successfully reset to defaults.");
+        } catch (error) {
+            console.error("CRITICAL: Failed to write default settings to the database.", error);
+        }
+    }
+
     currentSettings = await fetchSettingsFromDB();
     app.listen(port, () => {
         console.log(`Server running on port ${port}`);
