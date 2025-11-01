@@ -203,8 +203,14 @@ const initializeDatabase = async () => {
     let client;
     try {
         client = await pool.connect();
-        
-        // --- Create Tables if they don't exist ---
+
+        // --- Definitive Fix: Drop all tables to ensure a clean schema from scratch ---
+        console.log("Dropping existing tables to guarantee a clean schema...");
+        await client.query('DROP TABLE IF EXISTS history, operations, users, settings CASCADE;');
+        console.log("All tables dropped successfully.");
+
+        // --- Create Tables with the correct schema ---
+        console.log("Recreating tables...");
         await client.query(`
             CREATE TABLE IF NOT EXISTS settings (
                 key VARCHAR(255) PRIMARY KEY,
@@ -254,17 +260,14 @@ const initializeDatabase = async () => {
             );
         `);
         
-        // --- Forcefully Clear All Data on Every Start (Definitive Fix) ---
-        console.log("Forcefully clearing all data for a clean start...");
-        await client.query('TRUNCATE TABLE users, settings, history, operations RESTART IDENTITY CASCADE;');
-        console.log("All tables truncated successfully.");
+        console.log("Tables recreated successfully.");
 
-        // --- Re-insert Default Settings ---
-        console.log('Inserting default settings after truncation...');
+        // --- Insert Default Settings ---
+        console.log('Inserting default settings...');
         await client.query("INSERT INTO settings (key, value) VALUES ($1, $2)", ['app_settings', JSON.stringify(defaultSettings)]);
-        console.log('Default settings re-inserted.');
+        console.log('Default settings inserted.');
 
-        console.log('Database schema initialization and data reset complete.');
+        console.log('Database schema initialization and reset complete.');
     } catch (err) {
         console.error('Database initialization/reset failed:', err);
         dbInitializationError = `فشل في تهيئة/ترحيل مخطط قاعدة البيانات: ${err.message}`;
