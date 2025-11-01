@@ -202,6 +202,26 @@ const initializeDatabase = async () => {
     console.log('Initializing database schema...');
     const client = await pool.connect();
     try {
+        // --- Start Schema Migration & Correction ---
+        
+        // Fix for old settings table schema that caused "column 'key' does not exist" error.
+        const settingsTableExistsRes = await client.query("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'settings');");
+        if (settingsTableExistsRes.rows[0].exists) {
+            const checkKeyColumn = await client.query("SELECT column_name FROM information_schema.columns WHERE table_name='settings' AND column_name='key'");
+            if (checkKeyColumn.rows.length === 0) {
+                console.log("MIGRATION: Found outdated 'settings' table schema. Dropping and recreating...");
+                await client.query('DROP TABLE settings');
+                console.log("'settings' table dropped. It will be recreated with the correct schema.");
+            }
+        }
+        
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS settings (
+                key VARCHAR(255) PRIMARY KEY,
+                value JSONB
+            );
+        `);
+
         // Use CREATE TABLE IF NOT EXISTS to prevent errors on restart
         await client.query(`
             CREATE TABLE IF NOT EXISTS users (
@@ -221,27 +241,13 @@ const initializeDatabase = async () => {
             );
         `);
 
-        // --- Start Schema Migration ---
         // This block ensures existing databases get updated with new columns.
-        const checkReferralsColumn = await client.query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name='users' AND column_name='referrals'
-        `);
-
+        const checkReferralsColumn = await client.query("SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='referrals'");
         if (checkReferralsColumn.rows.length === 0) {
-            console.log("Migrating database: Adding 'referrals' column to 'users' table...");
+            console.log("MIGRATION: Adding 'referrals' column to 'users' table...");
             await client.query('ALTER TABLE users ADD COLUMN referrals INTEGER DEFAULT 0');
             console.log("'referrals' column added successfully.");
         }
-        // --- End Schema Migration ---
-        
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS settings (
-                key VARCHAR(255) PRIMARY KEY,
-                value JSONB
-            );
-        `);
         
         await client.query(`
             CREATE TABLE IF NOT EXISTS history (
@@ -265,6 +271,8 @@ const initializeDatabase = async () => {
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         `);
+
+        // --- End Schema Migration & Correction ---
 
         // Check if default settings exist, if not, insert them
         const res = await client.query("SELECT * FROM settings WHERE key = 'app_settings'");
