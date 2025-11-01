@@ -285,6 +285,35 @@ const initializeDbSchema = async () => {
     }
 };
 
+// --- Helper function for safely merging new default settings into existing DB settings ---
+const isObject = (item) => item && typeof item === 'object' && !Array.isArray(item);
+
+/**
+ * Deep merges a source object into a target object.
+ * It prioritizes the source's values, but preserves target keys that don't exist in the source.
+ * This is the reverse of a typical merge, designed to "fill in the blanks" in a primary object from a default object.
+ * @param {object} primary - The main object (e.g., from DB) that might be missing keys.
+ * @param {object} defaults - The complete default object with all possible keys.
+ * @returns {object} A new merged object.
+ */
+const mergeWithDefaults = (primary, defaults) => {
+    const output = { ...primary };
+    if (isObject(primary) && isObject(defaults)) {
+        Object.keys(defaults).forEach(key => {
+            // If key from defaults is missing in primary, add it.
+            if (!(key in primary)) {
+                output[key] = defaults[key];
+            } 
+            // If both are objects, recurse to merge them.
+            else if (isObject(primary[key]) && isObject(defaults[key])) {
+                output[key] = mergeWithDefaults(primary[key], defaults[key]);
+            }
+            // Otherwise, primary's value is kept (already in `output`).
+        });
+    }
+    return output;
+};
+
 
 let settingsCache = null;
 const getSettings = async () => {
@@ -293,7 +322,12 @@ const getSettings = async () => {
     try {
         const result = await pool.query('SELECT config FROM settings WHERE id = 1');
         if (result.rows.length > 0) {
-            settingsCache = result.rows[0].config;
+            const dbSettings = result.rows[0].config;
+            // Merge the settings from the DB with the defaults.
+            // This ensures any new fields added to `defaultSettings` (like new homepage sections)
+            // get added to the config for existing sites without overwriting their customizations.
+            const mergedSettings = mergeWithDefaults(dbSettings, defaultSettings);
+            settingsCache = mergedSettings;
             return settingsCache;
         }
         return defaultSettings;
