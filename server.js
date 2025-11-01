@@ -95,7 +95,9 @@ const defaultSettings = {
         dailyRewardPoints: 10, 
         referralBonus: 50,
         imageEdit_noWatermark: 8,
-        imageCreate_noWatermark: 15
+        imageCreate_noWatermark: 15,
+        contentRewrite: 1,
+        tweetGenerator: 1,
     },
     theme: { 
         logoUrl: "https://i.ibb.co/mH2WvTz/tomato-logo.png", 
@@ -149,7 +151,8 @@ const defaultSettings = {
             items: [
                 { id: 1, name_ar: "علياء منصور", name_en: "Alia Mansour", role_ar: "صانعة محتوى", role_en: "Content Creator", quote_ar: "وفر عليّ أداة تحويل النص إلى صوت ساعات من التسجيل الصوتي! الجودة مذهلة واللهجة طبيعية جدًا.", quote_en: "The text-to-speech tool saved me hours of voice recording! The quality is amazing and the dialect is very natural.", avatarUrl: "https://i.pravatar.cc/150?img=1" },
                 { id: 2, name_ar: "خالد الغامدي", name_en: "Khalid Al-Ghamdi", role_ar: "مصمم جرافيك", role_en: "Graphic Designer", quote_ar: "مولّد الصور غيّر طريقة عملي. أستطيع الآن تجربة أفكار بصرية بسرعة فائقة قبل البدء في التصميم الفعلي.", quote_en: "The image generator has changed my workflow. I can now experiment with visual ideas incredibly fast before starting the actual design.", avatarUrl: "https://i.pravatar.cc/150?img=3" },
-                { id: 3, name_ar: "فاطمة الزهراء", name_en: "Fatima Al-Zahra", role_ar: "مديرة تسويق", role_en: "Marketing Manager", quote_ar: "أستخدم محرر الصور يوميًا لتعديل صور منتجاتنا. ميزة الإزالة والتغيير باستخدام النص عبقرية وتوفر الوقت.", quote_en: "I use the image editor daily to modify our product photos. The feature to remove and change things with text is genius and a huge time-saver.", avatarUrl: "https://i.pravatar.cc/150?img=5" }
+                { id: 3, name_ar: "فاطمة الزهراء", name_en: "Fatima Al-Zahra", role_ar: "مديرة تسويق", role_en: "Marketing Manager", quote_ar: "أستخدم محرر الصور يوميًا لتعديل صور منتجاتنا. ميزة الإزالة والتغيير باستخدام النص عبقرية وتوفر الوقت.", quote_en: "I use the image editor daily to modify our product photos. The feature to remove and change things with text is genius and a huge time-saver.", avatarUrl: "https://i.pravatar.cc/150?img=5" },
+                { id: 4, name_ar: "سارة عبد الله", name_en: "Sara Abdullah", role_ar: "مدونة", role_en: "Blogger", quote_ar: "أداة إعادة الصياغة ممتازة! تساعدني في تجديد محتوى مقالاتي القديمة بسرعة وكفاءة، مع الحفاظ على المعنى الأصلي.", quote_en: "The rewriting tool is excellent! It helps me quickly and efficiently refresh the content of my old articles, while maintaining the original meaning.", avatarUrl: "https://i.pravatar.cc/150?img=8" }
             ]
         },
         faq: {
@@ -324,104 +327,614 @@ const getSettings = async () => {
         if (result.rows.length > 0) {
             const dbSettings = result.rows[0].config;
             // Merge the settings from the DB with the defaults.
-            // This ensures any new fields added to `defaultSettings` (like new homepage sections)
-            // get added to the config for existing sites without overwriting their customizations.
+            // This ensures any new fields added to `defaultSettings` (like a new service cost)
+            // will be available in the live app even if they haven't been saved in the admin panel yet.
             const mergedSettings = mergeWithDefaults(dbSettings, defaultSettings);
             settingsCache = mergedSettings;
-            return settingsCache;
+            return mergedSettings;
         }
         return defaultSettings;
-    } catch (err) {
-        console.error("Error fetching settings, returning default:", err);
+    } catch (error) {
+        console.error("Error fetching settings, falling back to defaults:", error);
         return defaultSettings;
     }
-}
-const invalidateSettingsCache = () => { settingsCache = null; };
+};
 
-
-const maintenanceMiddleware = async (req, res, next) => {
-    if (!pool) return next();
-
-    const settings = await getSettings();
-    if (!settings.maintenance?.enabled) {
-        return next();
-    }
-
-    // First, check if the user is an already authenticated admin. If so, let them pass.
+// --- Authentication Middleware ---
+const authenticateToken = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-    if (token) {
+    if (!token) return res.sendStatus(401);
+    
+    if (!pool) return res.status(503).json({ message: "Database service unavailable." });
+
+    try {
+        const result = await pool.query(
+            'SELECT * FROM users WHERE session_token = $1 AND token_expires_at > NOW()',
+            [token]
+        );
+        if (result.rows.length === 0) return res.sendStatus(403);
+        req.user = result.rows[0];
+        next();
+    } catch (error) {
+        console.error("Authentication error:", error);
+        res.sendStatus(500);
+    }
+};
+
+const adminOnly = (req, res, next) => {
+    if (!req.user || !req.user.is_admin) {
+        return res.status(403).json({ message: 'Access denied. Admin privileges required.' });
+    }
+    next();
+};
+
+// --- API Routes ---
+
+// GET /api/config (Public) - Basic app config
+app.get('/api/config', (req, res) => {
+    res.json({
+        stripe_enabled: !!stripe,
+        db_enabled: !!pool,
+        ai_enabled: !!ai,
+        email_enabled: !!MAILERSEND_API_TOKEN && !!MAILERSEND_SENDER_EMAIL
+    });
+});
+
+// GET /api/status (Public) - Detailed service status
+app.get('/api/status', (req, res) => {
+    res.json({
+        ai_enabled: !!ai,
+        message: aiInitializationError || "AI services are fully operational.",
+        message_ar: aiInitializationError || "خدمات الذكاء الاصطناعي تعمل بشكل كامل.",
+        email_enabled: !mailerSendInitializationError,
+        email_message: mailerSendInitializationError || "Email services are fully operational.",
+        email_message_ar: mailerSendInitializationError || "خدمات البريد الإلكتروني تعمل بشكل كامل."
+    });
+});
+
+
+// GET /api/settings (Conditionally Authenticated)
+app.get('/api/settings', async (req, res) => {
+    let currentUser = null;
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (token && pool) {
         try {
-            const userRes = await pool.query(
-                `SELECT is_admin FROM users WHERE session_token = $1 AND token_expires_at > NOW()`,
-                [token]
-            );
-            if (userRes.rows.length > 0 && userRes.rows[0].is_admin) {
-                return next(); // Admin is allowed for any endpoint.
+            const result = await pool.query('SELECT is_admin FROM users WHERE session_token = $1 AND token_expires_at > NOW()', [token]);
+            if (result.rows.length > 0) {
+                currentUser = result.rows[0];
             }
         } catch (dbError) {
-            console.error("Maintenance middleware DB error:", dbError);
-            // Fall through to block if we can't verify admin status.
+             console.error("Error checking user auth for settings:", dbError);
         }
     }
-
-    // If the user is not an authenticated admin, check for publicly allowed paths.
-    // These are needed for the maintenance page and login form to function.
-    if (req.path === '/api/config' || req.path === '/api/login') {
-        return next();
-    }
-
-    if (req.path === '/api/settings') {
-        // This endpoint is special: it's "allowed" but returns a 503 with data
-        // so the frontend knows to display the maintenance page.
-        return res.status(503).json({
-            message: "Site is in maintenance mode",
-            settings: settings
+    
+    const settings = await getSettings();
+    if (settings.maintenance?.enabled && !currentUser?.is_admin) {
+        // Send only minimal settings required for the maintenance page
+        return res.status(503).json({ 
+            message: 'Service Unavailable',
+            settings: {
+                theme: settings.theme,
+                maintenance: settings.maintenance
+            }
         });
     }
+
+    res.json(settings);
+});
+
+app.post('/api/register', async (req, res) => {
+    if (!pool) return res.status(503).json({ message: "Database service unavailable." });
     
-    // For all other requests from non-admins, block them.
-    return res.status(503).json({
-        message: "Site is in maintenance mode",
-        maintenance_message_en: settings.maintenance.message_en,
-        maintenance_message_ar: settings.maintenance.message_ar
-    });
-};
-
-app.use(maintenanceMiddleware);
-
-
-// --- Service Availability Middleware ---
-const checkDb = (req, res, next) => {
-    if (!pool) return res.status(503).json({ message: dbInitializationError || 'خدمة قاعدة البيانات غير متوفرة.' });
-    next();
-};
-const checkStripe = (req, res, next) => {
-    if (!stripe) return res.status(503).json({ message: stripeInitializationError || 'خدمة الدفع غير متوفرة.' });
-    next();
-};
-const checkAi = (req, res, next) => {
-    if (!ai) return res.status(503).json({ message: aiInitializationError || 'خدمة الذكاء الاصطناعي غير متوفرة.' });
-    next();
-};
-const checkMailerSend = (req, res, next) => {
-    if (mailerSendInitializationError) {
-        return res.status(503).json({ message: mailerSendInitializationError });
+    const { username, email, password, country, referralCode } = req.body;
+    if (!username || !email || !password || !country) {
+        return res.status(400).json({ message: 'All fields are required.' });
     }
-    next();
-};
+    
+    try {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
 
-// --- Unified Email Sending Utility ---
-const sendEmail = async (to, subject, html, fromName = "Tomato AI") => {
-    if (mailerSendInitializationError) {
-        throw new Error("Cannot send email because MailerSend is not configured.");
+            const emailCheck = await client.query('SELECT id FROM users WHERE email = $1', [email]);
+            if (emailCheck.rows.length > 0) {
+                return res.status(409).json({ message: 'Email already exists.' });
+            }
+
+            const usernameCheck = await client.query('SELECT id FROM users WHERE username = $1', [username]);
+            if (usernameCheck.rows.length > 0) {
+                return res.status(409).json({ message: 'Username already exists.' });
+            }
+
+            const salt = crypto.randomBytes(16).toString('hex');
+            const hashedPassword = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+            const finalPassword = `${salt}:${hashedPassword}`;
+            
+            // Check if this is the first user
+            const userCountResult = await client.query('SELECT COUNT(*) FROM users');
+            const isFirstUser = parseInt(userCountResult.rows[0].count, 10) === 0;
+
+            const newReferralCode = crypto.randomBytes(4).toString('hex');
+
+            let referredById = null;
+            if (referralCode) {
+                const referrerResult = await client.query('SELECT id FROM users WHERE referral_code = $1', [referralCode]);
+                if (referrerResult.rows.length > 0) {
+                    referredById = referrerResult.rows[0].id;
+                }
+            }
+            
+            const newUserResult = await client.query(
+                'INSERT INTO users (username, email, password, country, is_admin, referral_code, referred_by) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+                [username, email, finalPassword, country, isFirstUser, newReferralCode, referredById]
+            );
+            const newUser = newUserResult.rows[0];
+
+            if (referredById) {
+                const settings = await getSettings();
+                const bonus = settings.costs.referralBonus || 50;
+                await client.query('UPDATE users SET points = points + $1 WHERE id = $2', [bonus, referredById]);
+                await client.query('UPDATE users SET points = points + $1 WHERE id = $2', [bonus, newUser.id]);
+            }
+
+            const sessionToken = crypto.randomBytes(32).toString('hex');
+            const tokenExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+            await client.query(
+                'UPDATE users SET session_token = $1, token_expires_at = $2 WHERE id = $3',
+                [sessionToken, tokenExpiresAt, newUser.id]
+            );
+
+            await client.query('COMMIT');
+
+            // Don't send password back
+            delete newUser.password;
+            res.status(201).json({ 
+                message: 'Registration successful!', 
+                token: sessionToken,
+                user: newUser
+            });
+
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error("Registration error:", error);
+        res.status(500).json({ message: 'Server error during registration.' });
     }
-    const emailPayload = {
-        from: { email: MAILERSEND_SENDER_EMAIL, name: fromName },
-        to: [{ email: to }],
-        subject,
-        html
-    };
+});
+
+app.post('/api/login', async (req, res) => {
+    if (!pool) return res.status(503).json({ message: "Database service unavailable." });
+    
+    const { identifier, password } = req.body;
+    try {
+        const result = await pool.query(
+            'SELECT * FROM users WHERE (email = $1 OR username = $1) AND status = \'active\'', 
+            [identifier]
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'Account not found.' });
+        }
+        
+        const user = result.rows[0];
+        const [salt, key] = user.password.split(':');
+        const hashedPassword = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+
+        if (key !== hashedPassword) {
+            return res.status(401).json({ message: 'Incorrect password.' });
+        }
+        
+        const sessionToken = crypto.randomBytes(32).toString('hex');
+        const tokenExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+        await pool.query(
+            'UPDATE users SET session_token = $1, token_expires_at = $2 WHERE id = $3',
+            [sessionToken, tokenExpiresAt, user.id]
+        );
+        
+        delete user.password;
+        res.json({ token: sessionToken, user });
+
+    } catch (error) {
+        console.error("Login error:", error);
+        res.status(500).json({ message: 'Server error during login.' });
+    }
+});
+
+app.get('/api/users/me', authenticateToken, (req, res) => {
+    delete req.user.password;
+    res.json({ user: req.user });
+});
+
+app.put('/api/users/me', authenticateToken, async (req, res) => {
+    const { email, password } = req.body;
+    let updateQuery = 'UPDATE users SET email = $1';
+    const queryParams = [email, req.user.id];
+
+    if (password) {
+        const salt = crypto.randomBytes(16).toString('hex');
+        const hashedPassword = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+        const finalPassword = `${salt}:${hashedPassword}`;
+        updateQuery += ', password = $3';
+        queryParams.push(finalPassword);
+    }
+    
+    updateQuery += ' WHERE id = $2 RETURNING *';
+
+    try {
+        const result = await pool.query(updateQuery, queryParams);
+        const updatedUser = result.rows[0];
+        delete updatedUser.password;
+        res.json({ user: updatedUser });
+    } catch (error) {
+        console.error("Profile update error:", error);
+        if (error.code === '23505') { // Unique constraint violation
+            return res.status(409).json({ message: 'Email is already in use.' });
+        }
+        res.status(500).json({ message: 'Server error during profile update.' });
+    }
+});
+
+app.post('/api/claim-daily-reward', authenticateToken, async (req, res) => {
+    try {
+        const now = new Date();
+        const lastClaim = req.user.last_daily_claim ? new Date(req.user.last_daily_claim) : null;
+        
+        if (lastClaim && now - lastClaim < 24 * 60 * 60 * 1000) {
+            return res.status(429).json({ message: 'You have already claimed your daily reward.' });
+        }
+        
+        const settings = await getSettings();
+        const reward = settings.costs.dailyRewardPoints || 10;
+        
+        const result = await pool.query(
+            'UPDATE users SET points = points + $1, last_daily_claim = NOW() WHERE id = $2 RETURNING *',
+            [reward, req.user.id]
+        );
+        
+        const updatedUser = result.rows[0];
+        delete updatedUser.password;
+        res.json({ user: updatedUser });
+
+    } catch (error) {
+        console.error("Daily reward claim error:", error);
+        res.status(500).json({ message: 'Server error while claiming reward.' });
+    }
+});
+
+
+// --- History Routes ---
+app.post('/api/history', authenticateToken, async (req, res) => {
+    const { type, prompt, resultUrl, cost } = req.body;
+    try {
+        await pool.query(
+            'INSERT INTO history (user_id, type, prompt, result_url, cost) VALUES ($1, $2, $3, $4, $5)',
+            [req.user.id, type, prompt, resultUrl, cost]
+        );
+        res.sendStatus(201);
+    } catch (error) {
+        console.error("Failed to save history:", error);
+        res.status(500).json({ message: 'Failed to save history item.' });
+    }
+});
+
+app.get('/api/history', authenticateToken, async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT * FROM history WHERE user_id = $1 ORDER BY created_at DESC',
+            [req.user.id]
+        );
+        res.json({ history: result.rows });
+    } catch (error) {
+        console.error("Failed to fetch history:", error);
+        res.status(500).json({ message: 'Failed to fetch history.' });
+    }
+});
+
+
+// --- AI Generation Routes (Authenticated) ---
+app.post('/api/ai/generate', authenticateToken, async (req, res) => {
+    if (!ai) {
+        return res.status(503).json({ message: 'AI service is not configured on the server.' });
+    }
+
+    const { payload, removeWatermark } = req.body;
+    const settings = await getSettings();
+    let cost = 0;
+    
+    // Calculate cost based on operation type
+    try {
+        if (payload.type === 'generateImages') {
+            cost = removeWatermark ? settings.costs.imageCreate_noWatermark : settings.costs.imageCreate;
+        } else if (payload.type === 'generateContent' && payload.model === 'gemini-2.5-flash-image') {
+            cost = removeWatermark ? settings.costs.imageEdit_noWatermark : settings.costs.imageEdit;
+        } else if (payload.type === 'generateContent' && payload.model === 'gemini-2.5-flash-preview-tts') {
+            cost = Math.ceil((payload.contents[0].parts[0].text.length || 0) / 100) * settings.costs.textToSpeech;
+        } else if (payload.type === 'rewrite') {
+            cost = settings.costs.contentRewrite ?? 1;
+        } else if (payload.type === 'generate-tweets') {
+            cost = settings.costs.tweetGenerator ?? 1;
+        } else if (payload.type !== 'generateContent') {
+             return res.status(400).json({ message: 'Invalid AI operation type.' });
+        }
+    } catch (e) {
+        return res.status(400).json({ message: 'Invalid payload structure for cost calculation.'});
+    }
+
+
+    if (cost > 0 && req.user.points < cost) {
+        return res.status(402).json({ message: 'Insufficient points.' });
+    }
+    
+    let updatedUser = req.user;
+    if (cost > 0) {
+        const result = await pool.query(
+            'UPDATE users SET points = points - $1 WHERE id = $2 RETURNING *',
+            [cost, req.user.id]
+        );
+        updatedUser = result.rows[0];
+    }
+    
+    delete updatedUser.password;
+
+    try {
+        let aiResult;
+        switch (payload.type) {
+            case 'generateImages': {
+                const response = await ai.models.generateImages({ ...payload, model: 'imagen-4.0-generate-001' });
+                const base64Image = response.generatedImages[0].image.imageBytes;
+                aiResult = { dataUrl: `data:image/png;base64,${base64Image}` };
+                break;
+            }
+            case 'generateContent': {
+                const response = await ai.models.generateContent(payload);
+                if (payload.config.responseModalities?.includes('IMAGE')) {
+                    const base64Image = response.candidates[0].content.parts[0].inlineData.data;
+                    aiResult = { dataUrl: `data:image/png;base64,${base64Image}` };
+                } else if (payload.config.responseModalities?.includes('AUDIO')) {
+                    const base64Audio = response.candidates[0].content.parts[0].inlineData.data;
+                    aiResult = { base64Audio };
+                } else {
+                    aiResult = { text: response.text };
+                }
+                break;
+            }
+            case 'rewrite': {
+                const prompt = `أعد صياغة النص التالي بأسلوب احترافي وجذاب مع الحفاظ على المعنى الأساسي. اجعل النص أكثر وضوحًا وسلاسة. النص الأصلي: "${payload.text}"`;
+                const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+                aiResult = { text: response.text };
+                break;
+            }
+            case 'generate-tweets': {
+                const prompt = `بصفتك خبيرًا في وسائل التواصل الاجتماعي، قم بإنشاء 3 تغريدات قصيرة وجذابة (بتنسيق تويتر) حول الموضوع التالي. استخدم الهاشتاجات ذات الصلة واجعلها قابلة للمشاركة. الموضوع: "${payload.idea}"`;
+                const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+                aiResult = { text: response.text };
+                break;
+            }
+            default:
+                throw new Error('Unsupported AI operation type in execution.');
+        }
+
+        res.json({ result: aiResult, user: updatedUser });
+
+    } catch (error) {
+        console.error("AI Generation Error:", error);
+        // Refund points on AI error
+        if (cost > 0) {
+             const refundResult = await pool.query(
+                'UPDATE users SET points = points + $1 WHERE id = $2 RETURNING *',
+                [cost, req.user.id]
+            );
+            updatedUser = refundResult.rows[0];
+            delete updatedUser.password;
+        }
+        res.status(500).json({ message: `AI generation failed: ${error.message}`, user: updatedUser });
+    }
+});
+
+
+app.post('/api/ai/remove-background', authenticateToken, async (req, res) => {
+    if (!ai) return res.status(503).json({ message: 'AI service not configured.' });
+    
+    const { imagePart, textPart } = req.body;
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: [{ parts: [imagePart, textPart] }],
+            config: { responseModalities: ['IMAGE'] },
+        });
+
+        const base64Image = response.candidates[0].content.parts[0].inlineData.data;
+        const dataUrl = `data:image/png;base64,${base64Image}`;
+        res.json({ dataUrl });
+
+    } catch (error) {
+        console.error("Background removal AI error:", error);
+        res.status(500).json({ message: `Background removal failed: ${error.message}` });
+    }
+});
+
+
+// --- Stripe Routes ---
+app.post('/api/create-checkout-session', authenticateToken, async (req, res) => {
+    if (!stripe) {
+        return res.status(503).json({ message: 'Payment service is not configured.' });
+    }
+    const { packageId } = req.body;
+    const settings = await getSettings();
+    const pkg = settings.store.packages.find(p => p.id == packageId);
+
+    if (!pkg) {
+        return res.status(404).json({ message: 'Package not found.' });
+    }
+
+    try {
+        const session = await stripe.checkout.sessions.create({
+            payment_method_types: ['card'],
+            line_items: [{
+                price_data: {
+                    currency: 'usd',
+                    product_data: {
+                        name: `${pkg.points.toLocaleString()} Points Package`,
+                    },
+                    unit_amount: pkg.price * 100, // Price in cents
+                },
+                quantity: 1,
+            }],
+            mode: 'payment',
+            success_url: `${process.env.FRONTEND_URL || 'http://localhost:8000'}#store?payment_success=true`,
+            cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:8000'}#store?payment_cancelled=true`,
+            metadata: {
+                userId: req.user.id,
+                packageId: pkg.id,
+                points: pkg.points
+            }
+        });
+
+        res.json({ url: session.url });
+    } catch (error) {
+        console.error("Stripe session creation error:", error);
+        res.status(500).json({ message: 'Failed to create payment session.' });
+    }
+});
+
+// Stripe Webhook
+app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+    const sig = req.headers['stripe-signature'];
+    let event;
+    try {
+        event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    } catch (err) {
+        console.log(`Webhook signature verification failed.`, err.message);
+        return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    if (event.type === 'checkout.session.completed') {
+        const session = event.data.object;
+        const { userId, points } = session.metadata;
+
+        if (userId && points) {
+            try {
+                await pool.query(
+                    'UPDATE users SET points = points + $1 WHERE id = $2',
+                    [parseInt(points, 10), parseInt(userId, 10)]
+                );
+                console.log(`Successfully awarded ${points} points to user ${userId}.`);
+            } catch (error) {
+                console.error(`Failed to update points for user ${userId}:`, error);
+                // Consider adding to a retry queue or alerting system
+            }
+        }
+    }
+    res.status(200).json({ received: true });
+});
+
+// --- Admin Routes (Authenticated & Admin Only) ---
+
+app.get('/api/admin/users', authenticateToken, adminOnly, async (req, res) => {
+    try {
+        const result = await pool.query('SELECT id, username, email, country, points, status, is_admin FROM users ORDER BY id ASC');
+        res.json({ users: result.rows });
+    } catch (error) {
+        console.error("Admin fetch users error:", error);
+        res.status(500).json({ message: 'Failed to fetch users.' });
+    }
+});
+
+app.put('/api/admin/users/:id', authenticateToken, adminOnly, async (req, res) => {
+    const { id } = req.params;
+    const { points, status } = req.body;
+
+    try {
+        const targetUserRes = await pool.query('SELECT is_admin FROM users WHERE id = $1', [id]);
+        if (targetUserRes.rows.length === 0) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+        
+        // Prevent changing status of an admin
+        if (targetUserRes.rows[0].is_admin && status !== undefined && req.user.id != id) {
+            // Allow admin to change their own status if needed (unlikely)
+            return res.status(403).json({ message: 'Cannot change status for another admin account.' });
+        }
+        
+        let updateParts = [];
+        let queryParams = [];
+        let paramIndex = 1;
+
+        if (points !== undefined) {
+            updateParts.push(`points = points + $${paramIndex++}`);
+            queryParams.push(points);
+        }
+        if (status !== undefined) {
+            updateParts.push(`status = $${paramIndex++}`);
+            queryParams.push(status);
+        }
+
+        if (updateParts.length === 0) {
+            return res.status(400).json({ message: 'No update parameters provided.' });
+        }
+
+        queryParams.push(id);
+        const query = `UPDATE users SET ${updateParts.join(', ')} WHERE id = $${paramIndex} RETURNING id, username, email, country, points, status, is_admin`;
+        
+        const result = await pool.query(query, queryParams);
+        res.json({ user: result.rows[0] });
+
+    } catch (error) {
+        console.error("Admin update user error:", error);
+        res.status(500).json({ message: 'Failed to update user.' });
+    }
+});
+
+
+app.put('/api/admin/settings', authenticateToken, adminOnly, async (req, res) => {
+    const newSettings = req.body;
+    try {
+        await pool.query(
+            'UPDATE settings SET config = $1 WHERE id = 1',
+            [JSON.stringify(newSettings)]
+        );
+        settingsCache = newSettings; // Update cache immediately
+        res.status(200).json({ message: 'Settings updated successfully.' });
+    } catch (error) {
+        console.error("Admin update settings error:", error);
+        res.status(500).json({ message: 'Failed to save settings.' });
+    }
+});
+
+// FIX: Added a new endpoint to fetch comprehensive statistics for the admin dashboard. This includes total registered users, total AI operations performed, and total successful referrals. This resolves the bug where the dashboard showed incorrect or zero values.
+app.get('/api/stats', authenticateToken, adminOnly, async (req, res) => {
+    try {
+        const userCountQuery = pool.query('SELECT COUNT(*) FROM users;');
+        const opCountQuery = pool.query('SELECT COUNT(*) FROM history;');
+        const refCountQuery = pool.query("SELECT COUNT(*) FROM users WHERE referred_by IS NOT NULL;");
+
+        const [userCount, opCount, refCount] = await Promise.all([userCountQuery, opCountQuery, refCountQuery]);
+
+        res.json({
+            users: parseInt(userCount.rows[0]?.count || 0, 10),
+            operations: parseInt(opCount.rows[0]?.count || 0, 10),
+            referrals: parseInt(refCount.rows[0]?.count || 0, 10),
+        });
+    } catch (error) {
+        console.error("Failed to fetch admin stats:", error);
+        res.status(500).json({ message: 'Failed to retrieve statistics.' });
+    }
+});
+
+app.post('/api/admin/test-email', authenticateToken, adminOnly, async (req, res) => {
+    if (!MAILERSEND_API_TOKEN || !MAILERSEND_SENDER_EMAIL) {
+        return res.status(503).json({ message: 'MailerSend service is not configured on the server.' });
+    }
+    const { testEmail } = req.body;
+    if (!testEmail) {
+        return res.status(400).json({ message: 'Recipient email is required.' });
+    }
 
     try {
         const response = await fetch('https://api.mailersend.com/v1/email', {
@@ -430,502 +943,44 @@ const sendEmail = async (to, subject, html, fromName = "Tomato AI") => {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${MAILERSEND_API_TOKEN}`
             },
-            body: JSON.stringify(emailPayload)
+            body: JSON.stringify({
+                from: { email: MAILERSEND_SENDER_EMAIL },
+                to: [{ email: testEmail }],
+                subject: 'Tomato AI - Test Email',
+                text: 'This is a test email from your Tomato AI application. If you received this, your email configuration is working correctly!',
+                html: '<p>This is a test email from your Tomato AI application. If you received this, your <strong>email configuration is working correctly!</strong></p>'
+            })
         });
 
-        if (response.ok) {
-            const messageId = response.headers.get('x-message-id');
-            console.log(`Email sent successfully to ${to}. Message ID: ${messageId}`);
-            return {
-                success: true,
-                message: 'Email sent successfully!',
-                details: { status: response.status, statusText: response.statusText, messageId: messageId || 'Not provided' }
-            };
+        if (!response.ok) {
+            // Try to parse error from MailerSend if possible
+            const errorBody = await response.json().catch(() => ({ message: `MailerSend API returned status ${response.status}` }));
+            return res.status(response.status).json({
+                message: 'Failed to send test email.',
+                details: errorBody
+            });
         }
-
-        // Handle API error responses
-        let errorDetails = `Status: ${response.status} ${response.statusText}`;
-        try {
-            const errorBody = await response.json();
-            console.error('MailerSend API Error:', errorBody);
-            errorDetails = errorBody.message || errorDetails;
-            if (errorBody.errors) {
-                errorDetails += ` Details: ${JSON.stringify(errorBody.errors)}`;
-            }
-        } catch (e) {
-            console.error('Could not parse MailerSend error response as JSON.');
-        }
-        throw new Error(`Failed to send email. Details: ${errorDetails}`);
+        
+        res.status(200).json({ message: 'Test email sent successfully! Check the recipient\'s inbox.' });
 
     } catch (error) {
-        console.error('Error in sendEmail function:', error.message);
-        throw error;
-    }
-};
-
-const generateAndSetToken = async (userId, client) => {
-    const token = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days expiry
-    await client.query(
-        'UPDATE users SET session_token = $1, token_expires_at = $2 WHERE id = $3',
-        [token, expiresAt, userId]
-    );
-    return token;
-};
-
-const authenticateToken = async (req, res, next) => {
-    if (!pool) return res.status(503).json({ message: dbInitializationError });
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (token == null) return res.sendStatus(401);
-    
-    let client;
-    try {
-        client = await pool.connect();
-        const result = await client.query(
-            `SELECT 
-                u.id, u.username, u.email, u.country, u.points, u.is_admin, u.status, u.last_daily_claim, u.referral_code,
-                (SELECT COUNT(*) FROM users WHERE referred_by = u.id) as referrals
-             FROM users u
-             WHERE u.session_token = $1 AND u.token_expires_at > NOW()`,
-            [token]
-        );
-        
-        if (result.rows.length === 0) return res.sendStatus(403);
-        
-        req.user = result.rows[0];
-        next();
-    } catch (err) {
-        console.error("Auth middleware error:", err);
-        res.sendStatus(500);
-    } finally {
-        if (client) client.release();
-    }
-};
-
-const isAdmin = (req, res, next) => {
-    if (!req.user || !req.user.is_admin) {
-        return res.status(403).json({ message: 'Forbidden: Admin access required.' });
-    }
-    next();
-};
-
-// --- API Routes ---
-
-app.get('/api/config', (req, res) => {
-    res.json({});
-});
-
-app.post('/api/register', checkDb, async (req, res) => {
-    const { username, email, password, country, referralCode } = req.body;
-    if (!username || !email || !password) return res.status(400).json({ message: 'Username, email and password are required.' });
-    if (username.length < 3) return res.status(400).json({ message: 'Username must be at least 3 characters.'});
-
-    const client = await pool.connect();
-    try {
-        await client.query('BEGIN');
-
-        const userCountResult = await client.query('SELECT COUNT(*) FROM users');
-        const isFirstUser = parseInt(userCountResult.rows[0].count) === 0;
-        
-        const currentSettings = await getSettings();
-
-        const existingUser = await client.query('SELECT email, username FROM users WHERE LOWER(email) = LOWER($1) OR LOWER(username) = LOWER($2)', [email, username]);
-        if (existingUser.rows.length > 0) {
-            await client.query('ROLLBACK');
-            const user = existingUser.rows[0];
-            if (user.email.toLowerCase() === email.toLowerCase()) {
-                return res.status(409).json({ message: 'Email already exists.' });
-            }
-            if (user.username.toLowerCase() === username.toLowerCase()) {
-                return res.status(409).json({ message: 'Username already exists.' });
-            }
-        }
-        
-        let referredById = null;
-        if (referralCode) {
-            const referrerRes = await client.query('SELECT id FROM users WHERE referral_code = $1', [referralCode]);
-            if (referrerRes.rows.length > 0) {
-                referredById = referrerRes.rows[0].id;
-            }
-        }
-
-        const newUserPoints = referredById ? 10 + currentSettings.costs.referralBonus : 10;
-        
-        // Generate a more random referral code to prevent unique constraint violations
-        const newReferralCode = crypto.randomBytes(8).toString('hex');
-
-        const { rows } = await client.query(
-            `INSERT INTO users (username, email, password, country, is_admin, status, referred_by, points, referral_code) 
-             VALUES ($1, LOWER($2), $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-            [username, email, password, country, isFirstUser, 'active', referredById, newUserPoints, newReferralCode]
-        );
-        const newUser = rows[0];
-
-        if (referredById) {
-            await client.query('UPDATE users SET points = points + $1 WHERE id = $2', [currentSettings.costs.referralBonus, referredById]);
-        }
-
-        const token = await generateAndSetToken(newUser.id, client);
-        
-        await client.query('COMMIT');
-        
-        delete newUser.password;
-        delete newUser.session_token;
-        delete newUser.token_expires_at;
-        
-        return res.status(201).json({ 
-            message: 'Registration successful! You are now logged in.', 
-            user: newUser, 
-            token 
-        });
-
-    } catch (err) {
-        await client.query('ROLLBACK');
-        console.error("Registration Error:", err);
-        res.status(500).json({ message: 'Internal server error' });
-    } finally {
-        client.release();
+        console.error("Test email sending error:", error);
+        res.status(500).json({ message: 'An internal server error occurred while trying to send the email.', details: error.message });
     }
 });
 
 
-app.post('/api/login', checkDb, async (req, res) => {
-    const { identifier, password } = req.body;
-    const client = await pool.connect();
-    try {
-        const result = await client.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1) OR LOWER(username) = LOWER($1)', [identifier]);
-        if (result.rows.length === 0) {
-            return res.status(404).json({ message: 'Account not found.' });
-        }
-        
-        const user = result.rows[0];
-        if (user.password !== password) {
-            return res.status(401).json({ message: 'Incorrect password.' });
-        }
-        
-        if (user.status === 'banned') {
-            return res.status(403).json({ message: 'This account is banned.' });
-        }
-        
-        const token = await generateAndSetToken(user.id, client);
-        
-        delete user.password;
-        delete user.session_token;
-        delete user.token_expires_at;
-        
-        res.status(200).json({ message: 'Login successful', user, token });
-    } catch (err) {
-        console.error("Login error:", err);
-        res.status(500).json({ message: 'Internal server error' });
-    } finally {
-        if (client) client.release();
-    }
-});
 
-
-app.get('/api/users/me', checkDb, authenticateToken, async (req, res) => {
-    const user = req.user;
-    // The user object from authenticateToken already has sensitive fields removed
-    res.json({ user });
-});
-
-app.put('/api/users/me', checkDb, authenticateToken, async (req, res) => {
-    const { email, password } = req.body;
-    const userId = req.user.id;
-    try {
-        let query, queryParams;
-        const returnFields = 'id, username, email, country, points, is_admin, status, last_daily_claim';
-        if (password) {
-            query = `UPDATE users SET email = LOWER($1), password = $2 WHERE id = $3 RETURNING ${returnFields}`;
-            queryParams = [email, password, userId];
-        } else {
-            query = `UPDATE users SET email = LOWER($1) WHERE id = $2 RETURNING ${returnFields}`;
-            queryParams = [email, userId];
-        }
-        const result = await pool.query(query, queryParams);
-        res.json({ user: result.rows[0] });
-    } catch(err) {
-        console.error("Profile update error:", err);
-        if (err.code === '23505' && err.constraint.includes('email')) {
-             return res.status(409).json({ message: 'This email is already in use.' });
-        }
-        res.status(500).json({ message: 'Error updating profile' });
-    }
-});
-
-app.post('/api/ai/generate', checkDb, checkAi, authenticateToken, async (req, res) => {
-    const { payload, removeWatermark } = req.body;
-    const userId = req.user.id;
-    
-    let cost = 0;
-    const settings = await getSettings();
-    const { type, ...params } = payload;
-    
-    try {
-        // --- Server-side cost calculation ---
-        if (type === 'generateImages') {
-            cost = removeWatermark ? settings.costs.imageCreate_noWatermark : settings.costs.imageCreate;
-        } else if (type === 'generateContent' && params.model === 'gemini-2.5-flash-image') {
-            cost = removeWatermark ? settings.costs.imageEdit_noWatermark : settings.costs.imageEdit;
-        } else if (type === 'generateContent' && params.model === 'gemini-2.5-flash-preview-tts') {
-            cost = Math.ceil(params.contents[0].parts[0].text.length / 100) * settings.costs.textToSpeech;
-        } else {
-            throw new Error('Invalid AI operation type or model for cost calculation.');
-        }
-
-        if (req.user.points < cost) return res.status(402).json({ message: 'Insufficient points' });
-
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
-            await client.query('UPDATE users SET points = points - $1 WHERE id = $2', [cost, userId]);
-    
-            let apiResult;
-            
-            if (type === 'generateImages') {
-                const response = await ai.models.generateImages(params);
-                if (response.promptFeedback?.blockReason) throw new Error("تم حظر الطلب بسبب سياسات الأمان. يرجى تعديل الوصف.");
-                if (response.generatedImages?.[0]?.image?.imageBytes) {
-                     apiResult = { dataUrl: `data:image/png;base64,${response.generatedImages[0].image.imageBytes}` };
-                } else {
-                     console.error("Unexpected Imagen response:", JSON.stringify(response, null, 2));
-                     throw new Error("فشل الذكاء الاصطناعي في إنشاء الصورة. يرجى تجربة وصف مختلف.");
-                }
-            } else if (type === 'generateContent') {
-                const response = await ai.models.generateContent(params);
-                if (response.promptFeedback?.blockReason) throw new Error("تم حظر الطلب بسبب سياسات الأمان. يرجى تعديل طلبك أو الصورة المستخدمة.");
-                const firstPart = response.candidates?.[0]?.content?.parts?.[0];
-                if (firstPart?.inlineData) {
-                    if (params.config?.responseModalities?.includes('AUDIO')) {
-                        apiResult = { base64Audio: firstPart.inlineData.data };
-                    } else {
-                        apiResult = { dataUrl: `data:${firstPart.inlineData.mimeType};base64,${firstPart.inlineData.data}` };
-                    }
-                } else {
-                    const finishReason = response.candidates?.[0]?.finishReason;
-                    let userMessage = finishReason ? `توقف الإنشاء لسبب غير متوقع: ${finishReason}` : "لم يتم إرجاع البيانات المتوقعة من الذكاء الاصطناعي. قد تكون الاستجابة فارغة.";
-                    if (['NO_IMAGE', 'NO_AUDIO'].includes(finishReason)) userMessage = "فشل الذكاء الاصطناعي في إنشاء المخرجات. قد يكون هذا بسبب قيود الأمان على النص أو المحتوى الذي تم تحميله. يرجى تجربة طلب مختلف.";
-                    else if (finishReason === 'SAFETY') userMessage = "تم حظر الطلب بسبب سياسات الأمان. يرجى تعديل طلبك.";
-                    else if (finishReason === 'RECITATION') userMessage = "تم حظر الطلب لمنع عرض محتوى محمي بحقوق الطبع والنشر.";
-                    else if (finishReason === 'OTHER') userMessage = "توقف الذكاء الاصطناعي لسبب غير معروف. يرجى المحاولة مرة أخرى.";
-                    console.error("AI Generation Stopped:", finishReason, JSON.stringify(response, null, 2));
-                    throw new Error(userMessage);
-                }
-            } else {
-                throw new Error('Invalid AI operation type');
-            }
-            
-            const userResult = await client.query('SELECT id, username, email, country, points, is_admin, status, last_daily_claim FROM users WHERE id = $1', [userId]);
-            await client.query('COMMIT');
-            
-            const user = userResult.rows[0];
-            res.json({ result: apiResult, user });
-        } catch (err) {
-            await client.query('ROLLBACK');
-            throw err; // Re-throw to be caught by the outer catch block
-        } finally {
-            client.release();
-        }
-    } catch (err) {
-        console.error("AI Generation Error:", err.message, err.stack);
-        res.status(500).json({ message: err.message || 'An error occurred during AI generation.' });
-    }
-});
-
-app.post('/api/ai/remove-background', checkAi, authenticateToken, isAdmin, async (req, res) => {
-    try {
-        const { imagePart, textPart } = req.body;
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image',
-            contents: [{ parts: [imagePart, textPart] }],
-            config: { responseModalities: ['IMAGE'] },
-        });
-        const firstPart = response.candidates?.[0]?.content?.parts?.[0];
-        if (firstPart?.inlineData) {
-            res.json({ dataUrl: `data:${firstPart.inlineData.mimeType};base64,${firstPart.inlineData.data}` });
-        } else {
-            console.error("Unexpected BG Removal Response:", JSON.stringify(response, null, 2));
-            throw new Error("AI background removal failed to return an image.");
-        }
-    } catch (err) {
-        console.error("BG Removal Error:", err);
-        res.status(500).json({ message: err.message || 'Failed to remove background.' });
-    }
-});
-
-app.post('/api/claim-daily-reward', checkDb, authenticateToken, async (req, res) => {
-    const userId = req.user.id;
-    const lastClaim = req.user.last_daily_claim ? new Date(req.user.last_daily_claim).getTime() : 0;
-    const now = Date.now();
-    const twentyFourHours = 24 * 60 * 60 * 1000;
-
-    if (now - lastClaim < twentyFourHours) {
-        return res.status(429).json({ message: 'You can only claim the daily reward once every 24 hours.' });
-    }
-    
-    try {
-        const settings = await getSettings();
-        const pointsToAdd = settings.costs.dailyRewardPoints || 10;
-
-        const result = await pool.query(
-            'UPDATE users SET points = points + $1, last_daily_claim = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, username, email, country, points, is_admin, status, last_daily_claim',
-            [pointsToAdd, userId]
-        );
-        const user = result.rows[0];
-        res.status(200).json({ message: `You have claimed ${pointsToAdd} points!`, user });
-    } catch (err) {
-        console.error("Daily reward claim error:", err);
-        res.status(500).json({ message: 'Internal server error during reward claim.' });
-    }
-});
-
-
-app.get('/api/settings', checkDb, async (req, res) => {
-    try {
-        const settings = await getSettings();
-        res.json(settings);
-    } catch (err) {
-        console.error("Get settings error:", err);
-        res.status(500).json({ message: 'Failed to fetch settings' });
-    }
-});
-
-app.put('/api/admin/settings', checkDb, authenticateToken, isAdmin, async (req, res) => {
-    const newSettings = req.body;
-    try {
-        await pool.query('UPDATE settings SET config = $1 WHERE id = 1', [newSettings]);
-        invalidateSettingsCache();
-        res.status(200).json({ message: 'Settings updated successfully' });
-    } catch (err) {
-        console.error("Update settings error:", err);
-        res.status(500).json({ message: 'Failed to update settings' });
-    }
-});
-
-app.post('/api/create-checkout-session', checkDb, checkStripe, authenticateToken, async (req, res) => {
-    const { packageId } = req.body;
-    const user = req.user;
-    try {
-        const settings = await getSettings();
-        const pkg = settings.store.packages.find(p => p.id === packageId);
-        if (!pkg) return res.status(404).json({ message: 'Package not found.' });
-
-        const session = await stripe.checkout.sessions.create({
-            payment_method_types: ['card'],
-            line_items: [{
-                price_data: {
-                    currency: 'usd',
-                    product_data: { name: `${pkg.points} Points Package` },
-                    unit_amount: pkg.price * 100,
-                },
-                quantity: 1,
-            }],
-            mode: 'payment',
-            success_url: `${process.env.FRONTEND_URL || 'https://tomatoai.net'}/?payment_success=true#store`,
-            cancel_url: `${process.env.FRONTEND_URL || 'https://tomatoai.net'}/?payment_cancelled=true#store`,
-            customer_email: user.email,
-            metadata: { userEmail: user.email, pointsToAdd: pkg.points.toString() }
-        });
-        res.json({ url: session.url });
-    } catch (err) {
-        console.error("Stripe session creation error:", err);
-        res.status(500).json({ message: 'Failed to create payment session.' });
-    }
-});
-
-app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req, res) => {
-  if (!stripe || !pool) {
-    console.warn('Webhook received but Stripe or DB is not configured. Aborting.');
-    return res.status(503).send('Webhook handler is not available.');
-  }
-  const sig = req.headers['stripe-signature'];
-  let event;
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-  } catch (err) {
-    console.log(`Webhook signature verification failed.`, err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  if (event.type === 'checkout.session.completed') {
-    const { userEmail, pointsToAdd } = event.data.object.metadata;
-    if (userEmail && pointsToAdd) {
-        console.log(`Payment successful for ${userEmail}. Attempting to add ${pointsToAdd} points.`);
-        try {
-            const result = await pool.query('UPDATE users SET points = points + $1 WHERE LOWER(email) = LOWER($2) RETURNING email, points', [parseInt(pointsToAdd, 10), userEmail]);
-            if (result.rowCount > 0) console.log(`Successfully added points to ${result.rows[0].email}.`);
-            else console.warn(`Webhook received for non-existent user email: ${userEmail}`);
-        } catch (err) {
-            console.error('Error updating user points from webhook:', err);
-        }
-    }
-  }
-  res.status(200).json({ received: true });
-});
-
-app.get('/api/admin/users', checkDb, authenticateToken, isAdmin, async (req, res) => {
-    let client;
-    try {
-        client = await pool.connect();
-        const result = await client.query('SELECT id, username, email, country, points, is_admin, status, last_daily_claim FROM users ORDER BY id');
-        res.json({ users: result.rows });
-    } catch (err) {
-        console.error("Error fetching admin users list:", err);
-        res.status(500).json({ message: 'Failed to fetch users' });
-    } finally {
-        if (client) client.release();
-    }
-});
-
-app.put('/api/admin/users/:id', checkDb, authenticateToken, isAdmin, async (req, res) => {
-     const targetUserId = parseInt(req.params.id);
-     const { points, status } = req.body;
-     if (isNaN(targetUserId)) return res.status(400).json({ message: 'Invalid user ID' });
-     try {
-        const targetUserRes = await pool.query('SELECT * FROM users WHERE id = $1', [targetUserId]);
-        if (targetUserRes.rows.length === 0) return res.status(404).json({ message: 'User not found' });
-        
-        const targetUser = targetUserRes.rows[0];
-
-        // Security check: Prevent admins from banning other admins or themselves
-        if (targetUser.is_admin && status === 'banned') {
-            return res.status(403).json({ message: 'Admins cannot be banned.' });
-        }
-
-        const updates = [];
-        const values = [];
-        let valueIndex = 1;
-
-        if (points !== undefined && typeof points === 'number') {
-            updates.push(`points = $${valueIndex++}`);
-            values.push(points);
-        }
-        if (status !== undefined && ['active', 'banned'].includes(status)) {
-            updates.push(`status = $${valueIndex++}`);
-            values.push(status);
-        }
-
-        if (updates.length === 0) {
-            return res.status(400).json({ message: 'No valid fields to update provided.' });
-        }
-
-        values.push(targetUserId);
-        const query = `UPDATE users SET ${updates.join(', ')} WHERE id = $${valueIndex} RETURNING id, username, email, country, points, is_admin, status, last_daily_claim`;
-        
-        const result = await pool.query(query, values);
-        res.json({ user: result.rows[0], message: 'User updated successfully.' });
-
-     } catch(err) {
-         console.error(`Error updating user ${targetUserId}:`, err);
-         res.status(500).json({ message: 'Internal server error' });
-     }
-});
-
-// --- Server Startup ---
-(async () => {
+// --- Server Initialization ---
+const startServer = async () => {
     await initializeDbSchema();
     app.listen(port, () => {
-        console.log(`Server is listening on port ${port}`);
+        console.log(`Server running on port ${port}`);
+        if(dbInitializationError) console.error("DATABASE WARNING:", dbInitializationError);
+        if(stripeInitializationError) console.error("STRIPE WARNING:", stripeInitializationError);
+        if(aiInitializationError) console.error("AI WARNING:", aiInitializationError);
+        if(mailerSendInitializationError) console.error("EMAIL WARNING:", mailerSendInitializationError);
     });
-})();
+};
+
+startServer();
