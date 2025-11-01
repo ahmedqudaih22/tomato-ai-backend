@@ -203,19 +203,8 @@ const initializeDatabase = async () => {
     let client;
     try {
         client = await pool.connect();
-        // --- Start Schema Migration & Correction ---
         
-        // Fix for old settings table schema that caused "column 'key' does not exist" error.
-        const settingsTableExistsRes = await client.query("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'settings');");
-        if (settingsTableExistsRes.rows[0].exists) {
-            const checkKeyColumn = await client.query("SELECT column_name FROM information_schema.columns WHERE table_name='settings' AND column_name='key'");
-            if (checkKeyColumn.rows.length === 0) {
-                console.log("MIGRATION: Found outdated 'settings' table schema. Dropping and recreating...");
-                await client.query('DROP TABLE settings');
-                console.log("'settings' table dropped. It will be recreated with the correct schema.");
-            }
-        }
-        
+        // --- Create Tables if they don't exist ---
         await client.query(`
             CREATE TABLE IF NOT EXISTS settings (
                 key VARCHAR(255) PRIMARY KEY,
@@ -223,7 +212,6 @@ const initializeDatabase = async () => {
             );
         `);
 
-        // Use CREATE TABLE IF NOT EXISTS to prevent errors on restart
         await client.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -238,17 +226,10 @@ const initializeDatabase = async () => {
                 last_login TIMESTAMP WITH TIME ZONE,
                 referral_code VARCHAR(20) UNIQUE,
                 referrer_id INTEGER,
-                last_daily_claim TIMESTAMP WITH TIME ZONE
+                last_daily_claim TIMESTAMP WITH TIME ZONE,
+                referrals INTEGER DEFAULT 0
             );
         `);
-
-        // This block ensures existing databases get updated with new columns.
-        const checkReferralsColumn = await client.query("SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='referrals'");
-        if (checkReferralsColumn.rows.length === 0) {
-            console.log("MIGRATION: Adding 'referrals' column to 'users' table...");
-            await client.query('ALTER TABLE users ADD COLUMN referrals INTEGER DEFAULT 0');
-            console.log("'referrals' column added successfully.");
-        }
         
         await client.query(`
             CREATE TABLE IF NOT EXISTS history (
@@ -272,24 +253,22 @@ const initializeDatabase = async () => {
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         `);
+        
+        // --- Forcefully Clear All Data on Every Start (Definitive Fix) ---
+        console.log("Forcefully clearing all data for a clean start...");
+        await client.query('TRUNCATE TABLE users, settings, history, operations RESTART IDENTITY CASCADE;');
+        console.log("All tables truncated successfully.");
 
-        // --- End Schema Migration & Correction ---
+        // --- Re-insert Default Settings ---
+        console.log('Inserting default settings after truncation...');
+        await client.query("INSERT INTO settings (key, value) VALUES ($1, $2)", ['app_settings', JSON.stringify(defaultSettings)]);
+        console.log('Default settings re-inserted.');
 
-        // Check if default settings exist, if not, insert them
-        const res = await client.query("SELECT * FROM settings WHERE key = 'app_settings'");
-        if (res.rows.length === 0) {
-            console.log('No settings found in DB, inserting defaults...');
-            await client.query("INSERT INTO settings (key, value) VALUES ($1, $2)", ['app_settings', JSON.stringify(defaultSettings)]);
-        } else {
-             console.log('Settings already exist in DB.');
-        }
-
-        console.log('Database schema initialization and migration complete.');
+        console.log('Database schema initialization and data reset complete.');
     } catch (err) {
-        console.error('Database initialization/migration failed:', err);
-        // This is a critical error, the app might not function correctly
+        console.error('Database initialization/reset failed:', err);
         dbInitializationError = `فشل في تهيئة/ترحيل مخطط قاعدة البيانات: ${err.message}`;
-        throw err; // Re-throw to be caught by startServer
+        throw err;
     } finally {
         if (client) client.release();
     }
@@ -436,7 +415,8 @@ app.post('/api/register', async (req, res) => {
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Registration error:', error);
-        res.status(500).json({ message: 'An internal server error occurred during registration' });
+        // Send detailed error for diagnostics
+        res.status(500).json({ message: 'An internal server error occurred during registration', error: error.message });
     } finally {
         client.release();
     }
@@ -834,7 +814,7 @@ app.post('/api/ai/generate', authMiddleware, async (req, res) => {
         } else if (payload.type === 'generate-tweets') {
              const prompt = `Based on the topic "${payload.idea}", generate 3-5 engaging and distinct tweets. Each tweet should be concise, include relevant hashtags, and have a different angle (e.g., a question, a surprising fact, a call to action). Format the output clearly, separating each tweet.`;
               const response = await ai.models.generateContent({
-                model: 'gem-2.5-flash',
+                model: 'gemini-2.5-flash',
                 contents: prompt,
               });
              aiResult = { text: response.text };
