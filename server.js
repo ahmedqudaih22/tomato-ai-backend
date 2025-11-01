@@ -425,7 +425,7 @@ app.post('/api/register', maintenanceCheck, async (req, res) => {
         }
 
     } catch (error) {
-        console.error("Registration error:", error);
+        console.error("Registration error:", error.message);
         res.status(500).json({ message: 'An internal server error occurred during registration.' });
     }
 });
@@ -471,7 +471,7 @@ app.post('/api/login', maintenanceCheck, async (req, res) => {
         res.json({ token, user: sanitizeUser(updatedUser) });
 
     } catch (error) {
-        console.error("Login error:", error);
+        console.error("Login error:", error.message);
         res.status(500).json({ message: 'An internal server error occurred.' });
     }
 });
@@ -854,16 +854,75 @@ app.post('/api/admin/test-email', authenticate, requireAdmin, async (req, res) =
 });
 
 // --- Server Startup ---
+
+const initializeDatabase = async () => {
+    if (!pool) {
+        console.warn("Database pool not available. Skipping schema initialization.");
+        return;
+    }
+    try {
+        console.log("Initializing database schema...");
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(50) UNIQUE NOT NULL,
+                email VARCHAR(255) UNIQUE NOT NULL,
+                password_hash VARCHAR(255) NOT NULL,
+                country VARCHAR(10) NOT NULL,
+                points INTEGER DEFAULT 0,
+                is_admin BOOLEAN DEFAULT FALSE,
+                referral_code VARCHAR(50) UNIQUE,
+                referrer_id INTEGER REFERENCES users(id),
+                status VARCHAR(20) DEFAULT 'active',
+                auth_token VARCHAR(255),
+                last_login TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                last_daily_claim TIMESTAMPTZ,
+                referrals INTEGER DEFAULT 0
+            );
+        `);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS settings (
+                id INTEGER PRIMARY KEY,
+                settings_json JSONB
+            );
+        `);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS history (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                type VARCHAR(50) NOT NULL,
+                prompt TEXT,
+                result_url TEXT,
+                cost INTEGER,
+                date TIMESTAMPTZ DEFAULT NOW()
+            );
+        `);
+        await pool.query(`
+             CREATE TABLE IF NOT EXISTS operations (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                type VARCHAR(50) NOT NULL,
+                cost INTEGER,
+                timestamp TIMESTAMPTZ DEFAULT NOW()
+            );
+        `);
+        console.log("Database schema initialized successfully.");
+    } catch (error) {
+        console.error("CRITICAL: Failed to initialize database schema.", error);
+        // This is a fatal error, so we should update the global error state
+        dbInitializationError = "فشل في تهيئة مخطط قاعدة البيانات. تحقق من سجلات الخادم.";
+    }
+};
+
+
 const startServer = async () => {
+    // Definitive Fix: Ensure DB schema exists before doing anything else.
+    await initializeDatabase();
+    
     if (pool) {
         try {
-            // User requested a definite wipe of all user data to solve login issues.
-            console.log("Wiping all user-related data as requested...");
-            // Using TRUNCATE with CASCADE to ensure all related data is cleared and sequences are reset.
-            await pool.query('TRUNCATE TABLE users, history, operations RESTART IDENTITY CASCADE');
-            console.log("All user, history, and operations data has been cleared.");
-
-            // Force reset settings to default on every startup to fulfill user request
+            // User requested to restore default theme/content on startup.
             console.log("Attempting to reset application settings to default...");
             await pool.query(
                 'INSERT INTO settings (id, settings_json) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET settings_json = EXCLUDED.settings_json', 
@@ -871,7 +930,7 @@ const startServer = async () => {
             );
             console.log("Application settings have been successfully reset to defaults.");
         } catch (error) {
-            console.error("CRITICAL: Failed to reset database tables on startup.", error);
+            console.error("Could not reset settings to default:", error);
         }
     }
 
