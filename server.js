@@ -104,6 +104,7 @@ const defaultSettings = {
         logoUrl: "https://i.ibb.co/mH2WvTz/tomato-logo.png", 
         logoWidth: 150, 
         logoHeight: 50,
+        logoAlign: "left",
         primaryColor: "#FF6B6B", 
         secondaryColor: "#2EC4B6", 
         navbarColor: "#FFFFFF", 
@@ -287,6 +288,34 @@ const createToken = (userId) => {
     // This is a placeholder for a real JWT implementation
     return `token-for-user-${userId}-${Date.now()}`;
 };
+
+/**
+ * Performs a deep merge of two objects.
+ * @param {object} target The target object to merge into.
+ * @param {object} source The source object to merge from.
+ * @returns {object} The merged object.
+ */
+function deepMerge(target, source) {
+    const output = { ...target };
+    if (isObject(target) && isObject(source)) {
+        Object.keys(source).forEach(key => {
+            if (isObject(source[key])) {
+                if (!(key in target))
+                    Object.assign(output, { [key]: source[key] });
+                else
+                    output[key] = deepMerge(target[key], source[key]);
+            } else {
+                Object.assign(output, { [key]: source[key] });
+            }
+        });
+    }
+    return output;
+}
+
+function isObject(item) {
+    return (item && typeof item === 'object' && !Array.isArray(item));
+}
+
 
 const getUserIdFromToken = async (token) => {
     // Placeholder for JWT verification
@@ -627,11 +656,22 @@ app.get('/api/settings', async (req, res) => {
 
 // Update settings (Admin only)
 app.post('/api/settings', authMiddleware, adminMiddleware, async (req, res) => {
+    if (!pool) return res.status(503).json({ message: "Database service unavailable" });
     const client = await pool.connect();
     try {
-        await client.query("UPDATE settings SET value = $1 WHERE key = 'app_settings'", [req.body.settings]);
-        res.json({ message: 'Settings updated successfully' });
+        await client.query('BEGIN');
+        const currentSettingsRes = await client.query("SELECT value FROM settings WHERE key = 'app_settings'");
+        const currentSettings = currentSettingsRes.rows[0]?.value || {};
+        
+        const newSettings = deepMerge(currentSettings, req.body.settings);
+        
+        await client.query("UPDATE settings SET value = $1 WHERE key = 'app_settings'", [newSettings]);
+        await client.query('COMMIT');
+        
+        res.json({ message: 'Settings updated successfully', settings: newSettings });
     } catch (error) {
+        await client.query('ROLLBACK');
+        console.error("Error updating settings:", error);
         res.status(500).json({ message: 'Failed to update settings' });
     } finally {
         client.release();
