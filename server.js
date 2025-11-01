@@ -160,12 +160,14 @@ const initializeDbSchema = async () => {
             }
         };
 
-        // ONE-TIME RESET LOGIC: Use the absence of the 'username' column as the trigger for this destructive operation.
+        // ONE-TIME RESET LOGIC: This logic was previously used to clear the user table.
+        // It has been disabled to prevent accidental data loss on production deployments.
         if (!(await columnExists('username'))) {
-            console.log("!!! ONE-TIME DATABASE RESET TRIGGERED !!!");
-            // Truncate before adding constraints to avoid issues
-            await client.query('TRUNCATE TABLE users CASCADE');
-            console.log("User table truncated for a fresh start. The first user to register will be an admin.");
+            console.log("!!! WARNING: POTENTIAL SCHEMA RESET DETECTED ('username' column missing) !!!");
+            // The following line is extremely dangerous and has been permanently disabled.
+            // It was intended for initial setup only. If you need to reset the users table, do it manually.
+            // await client.query('TRUNCATE TABLE users CASCADE');
+            console.log("User table truncation has been SKIPPED to prevent data loss. The first user to register on an EMPTY table will still become an admin.");
         }
         
         // --- Schema Migration: Ensure all columns exist ---
