@@ -394,6 +394,12 @@ app.post('/api/login', maintenanceCheck, async (req, res) => {
         }
 
         const user = result.rows[0];
+        
+        // Safety check for password hash format
+        if (!user.password_hash || !user.password_hash.includes(':')) {
+            console.error(`Invalid password hash format for user: ${user.id}`);
+            return res.status(500).json({ message: 'An internal server error occurred.' });
+        }
 
         // Step 2: Verify password
         const [salt, storedHash] = user.password_hash.split(':');
@@ -567,7 +573,7 @@ app.post('/api/ai/generate', authenticate, async (req, res) => {
                     const part = response.candidates[0].content.parts.find(p => p.inlineData);
                     result = { base64Audio: part.inlineData.data };
                 }
-            } else if (payload.type === 'rewrite') {
+            } else if (type === 'rewrite') {
                  const styleInstruction = {
                     professional: 'Rewrite the following text in a professional and formal tone.',
                     simplify: 'Rewrite the following text to make it simpler and easier to understand.',
@@ -582,7 +588,7 @@ app.post('/api/ai/generate', authenticate, async (req, res) => {
                 });
                 result = { text: response.text };
 
-            } else if (payload.type === 'generate-tweets') {
+            } else if (type === 'generate-tweets') {
                 const prompt = `Generate 3-5 engaging and creative tweets based on the following topic or idea. Use relevant hashtags. The tweets should be ready to post.\n\nTopic: "${payload.idea}"`;
                 const response = await ai.models.generateContent({
                     model: 'gemini-2.5-flash',
@@ -793,8 +799,54 @@ app.post('/api/admin/test-email', authenticate, requireAdmin, async (req, res) =
 });
 
 // --- Server Startup ---
+const ensureAdminExists = async () => {
+    if (!pool) {
+        console.warn("Database pool not available, skipping admin user check.");
+        return;
+    }
+    const adminEmail = 'samy.qudaih95@gmail.com';
+    const adminUsername = 'samyqudaih';
+    const adminPassword = 'Sami12344';
+
+    try {
+        const client = await pool.connect();
+        try {
+            const res = await client.query('SELECT * FROM users WHERE email = $1', [adminEmail]);
+            
+            const salt = crypto.randomBytes(16).toString('hex');
+            const hash = crypto.pbkdf2Sync(adminPassword, salt, 1000, 64, 'sha512').toString('hex');
+            const passwordHash = `${salt}:${hash}`;
+
+            if (res.rows.length === 0) {
+                // Admin does not exist, create it
+                console.log("Admin user not found, creating one...");
+                const referralCode = crypto.randomBytes(4).toString('hex');
+                await client.query(
+                    `INSERT INTO users (username, email, password_hash, country, points, is_admin, status, referral_code)
+                     VALUES ($1, $2, $3, 'SA', 9999, true, 'active', $4)`,
+                    [adminUsername, adminEmail, passwordHash, referralCode]
+                );
+                console.log("Admin user created successfully.");
+            } else {
+                // Admin exists, update password and ensure admin status
+                console.log("Admin user found, ensuring credentials and status are correct...");
+                await client.query(
+                    `UPDATE users SET password_hash = $1, is_admin = true, status = 'active', username = $2 WHERE email = $3`,
+                    [passwordHash, adminUsername, adminEmail]
+                );
+                console.log("Admin user updated successfully.");
+            }
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error("Failed to ensure admin user exists:", error);
+    }
+};
+
 const startServer = async () => {
     currentSettings = await fetchSettingsFromDB();
+    await ensureAdminExists(); // Guarantees the admin account is always accessible
     app.listen(port, () => {
         console.log(`Server running on port ${port}`);
         if(dbInitializationError) console.error("DATABASE WARNING:", dbInitializationError);
