@@ -393,22 +393,26 @@ app.post('/api/create-checkout-session', authenticateToken, async (req, res) => 
             return res.status(404).json({ message: 'Package not found' });
         }
 
-        // This uses dynamic pricing (price_data), which creates a product and price
-        // on the fly for each transaction. This is simpler for the admin as they
-        // only need to set a price in the dashboard, not in Stripe's dashboard.
+        const lineItems = [{
+            price_data: {
+                currency: 'usd',
+                product_data: {
+                    name: `${pkg.points.toLocaleString()} Points Package`,
+                    description: `Get ${pkg.points.toLocaleString()} points to use on Tomato AI.`,
+                },
+                unit_amount: pkg.price * 100, // Price in cents
+            },
+            quantity: 1,
+        }];
+
+        console.log("--- Creating Stripe Session ---");
+        console.log(`User ID: ${userId}, Package ID: ${packageId}`);
+        console.log("Payload sent to Stripe:", JSON.stringify(lineItems, null, 2));
+
+
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
-            line_items: [{
-                price_data: {
-                    currency: 'usd',
-                    product_data: {
-                        name: `${pkg.points.toLocaleString()} Points Package`,
-                        description: `Get ${pkg.points.toLocaleString()} points to use on Tomato AI.`,
-                    },
-                    unit_amount: pkg.price * 100, // Price in cents
-                },
-                quantity: 1,
-            }],
+            line_items: lineItems,
             mode: 'payment',
             success_url: `${process.env.FRONTEND_URL || 'http://localhost:8080'}/#store?payment_success=true&session_id={CHECKOUT_SESSION_ID}`,
             cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:8080'}/#store?payment_cancelled=true`,
@@ -422,7 +426,6 @@ app.post('/api/create-checkout-session', authenticateToken, async (req, res) => 
         res.json({ url: session.url });
     } catch (error) {
         console.error('Stripe session creation error:', error);
-        // Propagate a more detailed error message if available from Stripe
         const errorMessage = error.raw ? error.raw.message : 'Failed to create checkout session.';
         res.status(500).json({ message: errorMessage });
     }
@@ -567,7 +570,7 @@ app.post('/api/settings', authenticateToken, adminRequired, async (req, res) => 
 
 
 app.listen(port, () => {
-    console.log(`Tomato AI server listening on port ${port}`);
+    console.log(`✅ SUCCESS: Tomato AI Server v2.1 (Dynamic Pricing) is running on port ${port} ✅`);
     if (!process.env.STRIPE_WEBHOOK_SECRET) {
       console.warn('WARNING: STRIPE_WEBHOOK_SECRET is not set. Points will not be added automatically after purchase.');
     }
