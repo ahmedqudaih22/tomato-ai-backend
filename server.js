@@ -200,7 +200,19 @@ async function handleStripeWebhook(req, res) {
 }
 
 // --- Middleware ---
-app.use(cors());
+const corsOptions = {
+    origin: [
+        'https://tomatoai.net', // Primary frontend domain from your redirect logic
+        'http://localhost:8080', // For local development
+        'https://tomato-ai-15430077659.us-west1.run.app' // Old domain from your redirect logic
+    ],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+};
+app.use(cors(corsOptions));
+// Explicitly handle pre-flight OPTIONS requests for robustness across all routes
+app.options('*', cors(corsOptions));
+
 app.post('/stripe-webhook', express.raw({type: 'application/json'}), handleStripeWebhook);
 app.use(express.json({ limit: '10mb' }));
 
